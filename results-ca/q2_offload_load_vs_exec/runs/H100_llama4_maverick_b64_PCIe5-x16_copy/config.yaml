@@ -1,0 +1,42 @@
+model:
+  model_name: llama4_maverick
+system:
+  gpu_gen: H100
+  num_node: 1
+  num_device: 1
+  processor_type: GPU
+  offload:
+    collects_gpu_compute: false
+    offload_expert_to_cpu_memory: true
+    offload_expert_to_ssd: false
+    ssd_energy_scale: 1.0
+    offload_bandwidth: 5
+    offload_bandwidth_GBps: 64.0
+  distribution:
+    expert_tensor_degree: 1
+    none_expert_tensor_degree: 1
+  optimization:
+    compressed_kv: false
+    use_absorb: false
+    prefill_mode: false
+    decode_mode: true
+serving:
+  max_batch_size: 64
+  max_process_token: 0
+simulation:
+  data: synthesis
+  input_len: 1024
+  output_len: 2
+  precision_byte: 2
+  iter: 2
+  injection_rate: 0
+  routing:
+    model: uniform
+log:
+  output_directory: ./out
+_meta:
+  gpu: H100
+  model: llama4_maverick
+  batch: 64
+  mode: copy
+  link_GBps: 64.0

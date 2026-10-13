@@ -1,0 +1,43 @@
+model:
+  model_name: mixtral
+system:
+  gpu_gen: H100
+  num_node: 1
+  num_device: 1
+  processor_type: GPU
+  offload:
+    collects_gpu_compute: true
+    offload_expert_to_cpu_memory: false
+    offload_expert_to_ssd: false
+    ssd_energy_scale: 1.0
+    offload_bandwidth: 5
+  distribution:
+    expert_tensor_degree: 1
+    none_expert_tensor_degree: 1
+  optimization:
+    compressed_kv: false
+    use_absorb: false
+    prefill_mode: false
+    decode_mode: true
+serving:
+  max_batch_size: 16
+  max_process_token: 0
+simulation:
+  data: synthesis
+  input_len: 1024
+  output_len: 129
+  precision_byte: 2
+  iter: 128
+  injection_rate: 0
+  routing:
+    model: correlated
+    zipf_s: 0.8
+    p_temporal: 0.5
+    p_spatial: 0.6
+    seed: 2026
+    log_file: routing_log.csv
+log:
+  output_directory: ./out
+_meta:
+  model: mixtral
+  scenario: correlated

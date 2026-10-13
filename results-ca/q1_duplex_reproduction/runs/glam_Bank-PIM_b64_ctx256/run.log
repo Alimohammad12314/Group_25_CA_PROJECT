@@ -1,0 +1,9 @@
+[Decode Mode] Current Length of sequences is modified into input_len
+Using synthesis trace
+ACT: 0.874512GB, Weight: 69.9226GB, Cache: 2.03125GB
+Total: 72.8284GB
+-----------------------------------
+-------------start-----------------
+-----------------------------------
+Total: 13829638.008826
+./out/glam_synthesis_256_4_GPU+PIM_N1_D4_TP4_DP1_maxbatch64_maxprocess524288_iter3_skew0_precision_byte2_parallel_execution0_ramul_decode.csv

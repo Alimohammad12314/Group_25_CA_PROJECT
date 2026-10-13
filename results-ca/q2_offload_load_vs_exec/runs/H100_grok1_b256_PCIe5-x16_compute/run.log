@@ -1,0 +1,6 @@
+[Decode Mode] Current Length of sequences is modified into input_len
+Using synthesis trace
+-----------------------------------
+-------------start-----------------
+-----------------------------------
+./out/grok1_synthesis_N1_D1_TP1_DP1_batchsize256_CPU_memory_NVLink5_GPU_compute.csv

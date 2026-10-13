@@ -1,3 +1,6 @@
 [submodule "LLMSimulator"]
 	path = LLMSimulator
 	url = https://github.com/scale-snu/LLMSimulator.git
+[submodule "external/LLMSimulator"]
+	path = external/LLMSimulator
+	url = https://github.com/scale-snu/LLMSimulator.git

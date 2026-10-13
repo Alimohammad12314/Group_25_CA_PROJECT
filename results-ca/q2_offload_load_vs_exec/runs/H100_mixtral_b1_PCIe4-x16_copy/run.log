@@ -1,0 +1,6 @@
+[Decode Mode] Current Length of sequences is modified into input_len
+Using synthesis trace
+-----------------------------------
+-------------start-----------------
+-----------------------------------
+./out/mixtral_synthesis_N1_D1_TP1_DP1_batchsize1_CPU_memory_NVLink5_offloaded_weight_copy.csv

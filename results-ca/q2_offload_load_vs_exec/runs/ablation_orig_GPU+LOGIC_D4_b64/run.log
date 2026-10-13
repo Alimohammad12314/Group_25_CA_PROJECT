@@ -1,0 +1,9 @@
+[Decode Mode] Current Length of sequences is modified into input_len
+Using synthesis trace
+ACT: 0.720459GB, Weight: 22.1182GB, Cache: 2.00391GB
+Total: 24.8425GB
+-----------------------------------
+-------------start-----------------
+-----------------------------------
+Total: 9638496.098775
+./out/mixtral_synthesis_1024_2_GPU+LOGIC_N1_D4_TP4_DP1_maxbatch64_maxprocess524288_iter2_skew0_precision_byte2_parallel_execution0_decode.csv

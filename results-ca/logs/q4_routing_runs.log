@@ -1,0 +1,12 @@
+{'model': 'mixtral', 'scenario': 'uniform'} ok
+{'model': 'mixtral', 'scenario': 'zipf'} ok
+{'model': 'mixtral', 'scenario': 'correlated'} ok
+{'model': 'grok1', 'scenario': 'uniform'} ok
+{'model': 'grok1', 'scenario': 'zipf'} ok
+{'model': 'grok1', 'scenario': 'correlated'} ok
+{'model': 'llama4_maverick', 'scenario': 'uniform'} ok
+{'model': 'llama4_maverick', 'scenario': 'zipf'} ok
+{'model': 'llama4_maverick', 'scenario': 'correlated'} ok
+{'model': 'deepseekR1', 'scenario': 'uniform'} ok
+{'model': 'deepseekR1', 'scenario': 'zipf'} ok
+{'model': 'deepseekR1', 'scenario': 'correlated'} ok

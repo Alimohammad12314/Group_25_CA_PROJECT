@@ -1,0 +1,40 @@
+# ---- binaries and build output (never committed) ----
+build/
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+*.bin
+*.elf
+
+# ---- images / documents (regenerate figures with results-ca/scripts/plot_*.py) ----
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.pdf
+*.svg
+
+# ---- archives ----
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+
+# ---- Python ----
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# ---- editor / local scratch ----
+.vscode/
+.idea/
+*.swp
+midterm/

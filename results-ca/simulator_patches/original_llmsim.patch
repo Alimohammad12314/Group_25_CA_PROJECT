@@ -1,0 +1,26 @@
+--- a/eval/test.cpp
++++ b/eval/test.cpp
+@@ -168,6 +168,10 @@
+     model_config = llama7bMoE;
+   } else if (!model_name.compare("llama3_405B")) {
+     model_config = llama3_405B;
++  } else if (!model_name.compare("glam")) {
++    model_config = glam;
++  } else if (!model_name.compare("llama3_70B")) {
++    model_config = llama3_70B;
+   } else if (!model_name.compare("grok1")) {
+     model_config = grok1;
+   } else if (!model_name.compare("deepseekV3")) {
+--- a/src/model/model_config.h
++++ b/src/model/model_config.h
+@@ -108,6 +108,10 @@
+     ModelConfig(7168, 128, 60, 128, 128, 131072, 18432, 2048, 1, 1, 256, 1, 1, 8,
+                 3, 3, 1536, 512, 128, 64, 129280, true, true, 0.0,"deepseekV3"); // n_layer = 60 (not consider MTP module)
+ 
++static ModelConfig llama3_70B = // dense Llama3-70B (Duplex Fig. 14), dims as in SSD-offloading preset
++    ModelConfig(8192, 128, 80, 64, 8, 131072, 28672, 0, 1, 2, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 128256, false, false, 0.0,
++                "llama3_70B");
++
+ static ModelConfig llama3_405B =
+     ModelConfig(16384, 128, 126, 128, 8, 131072, 53248, 53248, 1, 1, 0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 128256, false, false, 0.0,
+                 "llama3_405B");

@@ -1,0 +1,49 @@
+model:
+  model_name: grok1
+system:
+  gpu_gen: H100
+  nvlink_gen: 4
+  infiniband_gen: 400
+  num_node: 1
+  num_device: 8
+  processor_type: GPU
+  distribution:
+    expert_tensor_degree: 1
+    none_expert_tensor_degree: 4
+  optimization:
+    parallel_execution: false
+    hetero_subbatch: false
+    disagg_system: false
+    use_low_unit_moe_only: false
+    use_ramulator: true
+    compressed_kv: false
+    use_absorb: false
+    use_flash_mla: false
+    use_flash_attention: true
+    reuse_kv_cache: false
+    kv_cache_reuse_rate: 0.0
+    prefill_mode: false
+    decode_mode: true
+serving:
+  max_batch_size: 64
+  max_process_token: 0
+simulation:
+  data: synthesis
+  input_len: 256
+  output_len: 4
+  precision_byte: 2
+  skewness: 0.0
+  iter: 3
+  injection_rate: 0
+  exit_out_of_memory: false
+  mem_cap_limit: false
+log:
+  print_log: false
+  export_gantt: false
+  output_directory: ./out
+  gantt_directory: ./gantt
+_meta:
+  model: grok1
+  system: 2xGPU
+  batch: 64
+  ctx: 256
