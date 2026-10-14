@@ -1,5 +1,13 @@
 # CA Project 2: The MoE Memory Wall — Predicting and Prefetching Experts
 
+**Group 25**
+
+| Members |
+|---|
+| Palak Mishra |
+| Mohammad Ali |
+| Shivansh Bhatnagar |
+
 Course project (Computer Architecture, IIIT Delhi). We study expert-weight movement in Mixture-of-Experts LLM inference **entirely in simulation**, using:
 
 - **LLMSimulator** (scale-snu), the simulator of the MICRO 2024 *Duplex* paper, with a modified Ramulator 2.0; and

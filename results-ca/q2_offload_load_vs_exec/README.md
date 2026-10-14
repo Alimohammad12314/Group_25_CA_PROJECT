@@ -2,6 +2,50 @@
 
 **Goal (mid-eval item 2):** disable multi-GPU expert sharding and Logic-PIM, add an off-chip DRAM that holds all expert weights, and report **expert loading time** and **expert execution time**.
 
+## At a glance: expert loading time vs expert execution time
+
+In every MoE layer the router picks k experts for each token. With all experts stored in off-chip DRAM, each picked expert must go through two steps before the layer can finish:
+
+```
+ off-chip DRAM ──(1) LOAD: copy the expert's weights over the link──► GPU HBM ──(2) EXECUTE: GPU runs the expert FFN──► output
+               (PCIe 32/64 GB/s or NVLink-C2C 450/900 GB/s)          (HBM 2039 GB/s on A100)
+```
+
+| | **Expert loading time** | **Expert execution time** |
+|---|---|---|
+| What it is | Time to copy the selected experts' weights from off-chip DRAM into GPU HBM | Time for the GPU to run the selected experts (gate, up and down matrix multiplies plus SiLU) once their weights are in HBM |
+| Limited by | link bandwidth (32–900 GB/s) | HBM bandwidth (2039 GB/s on A100). During decode an expert sees only a few tokens, so the GPU spends its time reading weights, not computing |
+| Formula | bytes of selected experts ÷ link bandwidth | ≈ bytes of selected experts ÷ HBM bandwidth (simulator roofline: max(compute, memory)) |
+| Simulator run used | **copy pass** (offload on, `collects_gpu_compute: off`) | **base pass** (offload off, experts already in HBM) |
+| CSV column | `moe_offload` energy → bytes → ÷ link bandwidth (copy-pass `expert_ffn` agrees within 0.3%) | `expert_ffn` (ns → ms) |
+
+Both times are reported **per decode step**: one step generates one token for every sequence in the batch and runs through all MoE layers. Per-layer and per-expert values are given too.
+
+### Worked example: Mixtral on A100, batch 1, PCIe 4.0 link
+- One Mixtral expert = 3 matrices × 4096 × 14336 × 2 bytes = **352 MB**.
+- Batch 1 → 1 token → the router picks **k = 2 experts per layer**, in each of **32 layers**.
+
+| | One expert | One layer (2 experts) | Whole decode step (32 layers) |
+|---|---|---|---|
+| **Load** over PCIe4 (32 GB/s) | 352 MB ÷ 32 GB/s = **11.0 ms** | 22.0 ms | **704.6 ms** |
+| **Execute** from HBM (2039 GB/s) | 352 MB ÷ 2039 GB/s = **0.173 ms** | 0.35 ms | **11.07 ms** |
+| **Load ÷ Execute** | 2039 ÷ 32 = **63.7×** | 63.7× | **63.7×** |
+
+The hand values match the simulator: 0.173 ms per expert executed and 704.6 ms per step loaded. Both operations move the **same bytes** (the expert's weights); only the pipe differs. So **loading ÷ execution ≈ HBM bandwidth ÷ link bandwidth**.
+
+### Comparison for all four models (A100, batch 1, one decode step)
+
+| Model | Experts moved per step | Execution time | Loading time, PCIe4 (32 GB/s) | Load ÷ Exec | Loading time, C2C-900 (900 GB/s) | Load ÷ Exec |
+|---|---|---|---|---|---|---|
+| Mixtral | 2 × 32 layers × 352 MB = 22.5 GB | 11.07 ms | 704.6 ms | **63.7×** | 25.1 ms | **2.26×** |
+| Grok-1 | 2 × 64 × 1208 MB = 154.6 GB | 75.86 ms | 4832 ms | **63.7×** | 171.8 ms | **2.26×** |
+| Llama-4 Maverick | 1 × 24 × 252 MB = 6.0 GB | 2.98 ms | 188.7 ms | **63.4×** | 6.7 ms | **2.25×** |
+| DeepSeek-R1 | 8 × 57 × 88 MB = 40.2 GB | 19.82 ms | 1255 ms | **63.3×** | 44.6 ms | **2.25×** |
+
+The ratio stays the same at larger batch: Mixtral at batch 64 loads all 8 experts per layer (90 GB) in 2819 ms vs 44.6 ms execution, **63.1×** on PCIe4 and **2.25×** on C2C-900. On H100 (3352 GB/s HBM) the ratios are larger: up to 105× (PCIe4) and 3.7× (C2C-900).
+
+**Conclusion:** expert loading is slower than expert execution in **all 160 configurations** (2 GPUs × 4 models × 5 batch sizes × 4 links). Even the fastest link (900 GB/s) is 2.3× (A100) to 3.7× (H100) slower than HBM. If experts are fetched only when the router asks for them, the GPU sits idle for most of the step (§4.4). Sections 2–4 give the full method and all results; Q3 explains why the ratio equals the bandwidth ratio.
+
 ## 1. What was changed relative to Q1
 
 | Q1 Duplex configuration | Q2 configuration | Config key |

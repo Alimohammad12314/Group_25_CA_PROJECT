@@ -26,9 +26,4 @@ python3 scripts/q4_routing_runs.py  && python3 scripts/q4_analysis.py    # Q4
 - FP16 weights everywhere (`precision_byte: 2`).
 - HBM capacity is not enforced by the simulator, so "all experts in HBM" is an idealised reference.
 
-## Things to discuss with the TA
-1. The off-chip DRAM is modeled as a bandwidth-limited link (host DDR5 over PCIe 4/5 or NVLink-C2C), using the SSD-offloading framework's CPU-memory mode. Is a cycle-level DRAM model expected instead?
-2. Q4 has no real routing traces, so correlation can only be studied on synthetic routing. Is the parameterised correlated model acceptable for the predictor/prefetcher phase?
-3. The simulator has no HBM expert cache. The prefetcher (final phase) needs one, with an HBM budget to be agreed.
 
-*Note: the course requires the report itself to be written by the students. These READMEs document methods and numbers for reference.*
