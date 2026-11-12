@@ -2,12 +2,14 @@
 
 Project 2 (MoE memory wall), Group 25. This file is the in-repository copy of the design log; it
 records what was built, every change from the plan, and the measurement that forced it.
-Results tables are in the last section and in `results/`.
+Results tables are in the last section and in `results/`. Full citations for every source named
+below: the References section of the repository README.
 
 ## 1. Starting point
 
 The input was the plan *MoE Memory Wall: Papers and Proposed Design for the Final Submission*:
-a training-free prefetcher that puts ST-MoE's correlation tables, STEP's vote window, APEX's
+a training-free prefetcher that puts ST-MoE's correlation tables, a temporal vote window (named "STEP" in the plan;
+no published paper of that name was found, so it is our design), APEX's
 adaptive top-(k+delta) budget and ProMoE's multi-layer lookahead in front of a bounded HBM expert
 cache. All experts live off-chip; HBM holds a bounded cache; routing stays exact (no pruning).
 The zero-cache timeline must reproduce the mid-eval on-demand numbers (Mixtral, A100, batch 1:
@@ -31,13 +33,13 @@ Predictions depend only on routing history, never on timing, so they are compute
 | # | Component | As built | Source idea |
 |---|---|---|---|
 | 1 | Traces | `[request, token, layer, top-k]` + prompt routing for warm-up; B requests decode together | plan step 1 |
-| 2 | Temporal predictor | votes over the last W tokens per sequence and layer; W doubles after 2 windows > 75 % hit rate, halves < 40 % | STEP; ST-MoE history table |
+| 2 | Temporal predictor | votes over the last W tokens per sequence and layer; W doubles after 2 windows > 75 % hit rate, halves < 40 % | our design; ST-MoE history table |
 | 3 | Cross-layer predictor | per (distance d, layer) counters for (expert at l, expert at l+d); row halving on overflow; 4-bit | ST-MoE; ProMoE / FineMoE distance |
 | 4 | Popularity prior | sliding 64-step window of batch counts per layer | PopFetcher; LFU |
 | 5 | Rank calibration | each predictor's rank -> probability via an online hit-rate-per-rank table | new (section 4) |
 | 6 | Chooser | weight = EMA recall^2 per (layer, distance) over calibrated probabilities | tournament predictor; DAOP |
 | 7 | Batch union | P(e) = 1 - prod_b (1 - q_b(e)) | ExpertFlow batch view |
-| 8 | Adaptive budget | M = K_hat + tau-quantile of the last 64 oracle delta*; delta = 0 when recall < 40 % | APEX (empirical CDF); STEP off-switch |
+| 8 | Adaptive budget | M = K_hat + tau-quantile of the last 64 oracle delta*; delta = 0 when recall < 40 % | APEX (empirical CDF); off-switch is our design |
 | 9 | Lookahead | smallest d whose compute covers the predicted load, cap 4; crosses the token boundary | ProMoE stride; ExpertFlow adaptive step |
 | 10 | Link | FIFO, or demand misses preempt prefetches at 16 MB chunks; late prefetches promoted; stale ones dropped | ProMoE; PreScope; SPICE |
 | 11 | Link-time cap | prefetch only what the link can deliver before the target layer | SpecPrefetch |

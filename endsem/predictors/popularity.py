@@ -1,4 +1,4 @@
-"""Popularity prior (PopFetcher sliding window; the LFU result of Lin et al.).
+"""Popularity prior (PopFetcher sliding window [README ref 5]; classic LFU).
 
 Per layer, the activation count of each expert over the last `window` decode steps, summed over
 the batch. The same score is given to every sequence.
