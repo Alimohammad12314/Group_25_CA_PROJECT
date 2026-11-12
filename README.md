@@ -53,7 +53,7 @@ Other documents: [`endsem/README.md`](endsem/README.md) (end-semester code and h
 Everything is in [`endsem/`](endsem/README.md). The design log with every decision and the full results is
 [`endsem/DESIGN.md`](endsem/DESIGN.md).
 
-![architecture](endsem/architecture.png)
+![architecture](endsem/architecture_v2.png)
 
 **Figure: architecture.** Blue = control path (predictions), grey = data path (expert weights).
 

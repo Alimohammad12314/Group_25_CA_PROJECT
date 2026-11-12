@@ -1,4 +1,4 @@
-"""Draw the end-semester architecture as endsem/architecture.png (paper-style block diagram).
+"""Draw the end-semester architecture as endsem/architecture_v2.png (paper-style block diagram).
 
     python -m experiments.architecture_diagram
 
@@ -14,7 +14,7 @@ from matplotlib.patches import FancyArrowPatch, FancyBboxPatch, Rectangle
 
 from .common import ROOT
 
-OUT = os.path.join(ROOT, "architecture.png")
+OUT = os.path.join(ROOT, "architecture_v2.png")
 INK, INK2, EDGE, GROUP = "#1d1d1b", "#55544f", "#3d3d3a", "#f3f3f1"
 CTRL = "#2a78d6"      # control path (predictions)
 DATA = "#6b6a65"      # data path (expert weights)

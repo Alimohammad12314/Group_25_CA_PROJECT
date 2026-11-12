@@ -26,7 +26,7 @@ The zero-cache timeline must reproduce the mid-eval on-demand numbers (Mixtral, 
 
 ## 3. Design as built
 
-![architecture](architecture.png)
+![architecture](architecture_v2.png)
 
 Predictions depend only on routing history, never on timing, so they are computed once per
 (model, batch, predictor configuration) as a *prediction stream* and replayed by every timeline run.
