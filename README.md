@@ -23,6 +23,30 @@ How we work:
 
 This repository is a fork of SSD-offloading. It adds our experiment code, results and simulator patches.
 
+## Contents
+
+1. [End-semester: prediction, prefetching and HBM management](#end-semester-prediction-prefetching-and-hbm-management)
+   - [Results at a glance](#results-at-a-glance): problem, prediction accuracy, where it helps, component contributions,
+     context length, energy, bonus, expert-load latency, limitations
+2. [References: where each strategy comes from](#references-where-each-strategy-comes-from)
+   - [Strategies used in the design](#strategies-used-in-the-design)
+   - [Simulators, traces and models](#simulators-traces-and-models)
+   - [Reference list](#reference-list)
+3. [Mid-evaluation](#mid-evaluation) (Q1-Q4, Q4-extended)
+4. [Repository layout](#repository-layout)
+5. [Setup on a new machine](#setup-on-a-new-machine)
+   - [Prerequisites](#prerequisites)
+   - [1. Clone](#1-clone-with-submodules) · [2. Patch and build the simulators](#2-patch-and-build-both-simulators) ·
+     [3. Python packages](#3-python-packages) · [4. Regenerate figures](#4-regenerate-figures-fast-no-simulation) ·
+     [5. Re-run mid-evaluation simulations](#5-re-run-the-simulations-optional) ·
+     [6. End-semester experiments](#6-end-semester-experiments)
+6. [Simulation conventions](#simulation-conventions)
+7. [Upstream: SSD-offloading](#upstream-ssd-offloading)
+
+Other documents: [`endsem/README.md`](endsem/README.md) (end-semester code and how to run it) ·
+[`endsem/DESIGN.md`](endsem/DESIGN.md) (design log and full results) · [`endsem/GPU.md`](endsem/GPU.md) (H100 validation) ·
+[`results-ca/README.md`](results-ca/README.md) (mid-evaluation summary)
+
 ## End-semester: prediction, prefetching and HBM management
 
 Everything is in [`endsem/`](endsem/README.md). The design log with every decision and the full results is
