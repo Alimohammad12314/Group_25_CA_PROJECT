@@ -8,6 +8,7 @@ Every experiment here was run in simulation, with **LLMSimulator** (Duplex, modi
 | 2. Single GPU, no sharding, no Logic-PIM, experts in off-chip DRAM | [`q2_offload_load_vs_exec/`](q2_offload_load_vs_exec/README.md) | 360 runs: A100/H100 × 4 models × 5 batches × 4 links. Loading exceeds execution in 160 of 160 configurations, by 2.2× (A100, C2C-900) to 105× (H100, PCIe4). |
 | 3. MoE flow and why loading is the bottleneck | [`q3_moe_flow_bottleneck/`](q3_moe_flow_bottleneck/README.md) | load/exec ≈ HBM BW ÷ link BW, because decode experts have Op/B = tokens/expert ≪ ridge. Break-even needs 347–30919 tokens per expert. |
 | 4. Temporal and spatial correlation of expert accesses | [`q4_expert_correlation/`](q4_expert_correlation/README.md) | The simulator's routing is i.i.d. (uniform or Zipf), so measured correlation is zero; Zipf adds only frequency skew. A parameterised correlated mode is added for the predictor work. |
+| 4-ext. Router logic: do relations emerge from how the router picks experts? | [`q4_extended_router_logic/`](q4_extended_router_logic/README.md) | A real-style router (score = W·h on each token's hidden vector, top-k) added to the simulator. Relations emerge on their own: next token reuses 72% of experts (Mixtral, chance 25%) and 53% (DeepSeek, chance 3%) when consecutive tokens are similar; a weaker cross-layer link spans many layers. |
 
 `simulator_patches/` documents the source changes to both simulators, `scripts/` holds every script used, and each `qN_*/runs/` folder keeps the exact `config.yaml`, simulator log and raw CSV of every run.
 
@@ -17,6 +18,7 @@ cd results-ca        # from the repository root
 python3 scripts/q1_duplex.py        && python3 scripts/plot_q1.py        # Q1
 python3 scripts/q2_offload.py       && python3 scripts/plot_q2_q3.py     # Q2 + Q3
 python3 scripts/q4_routing_runs.py  && python3 scripts/q4_analysis.py    # Q4
+python3 scripts/q4x_router_runs.py  && python3 scripts/q4x_analysis.py   # Q4-extended
 ```
 `scripts/simrun.py` runs each configuration in its own temporary directory (both binaries read `./config.yaml`), 28 at a time. Base configs are in `configs/`. Figures (`qN_*/plots/*.png`) are not committed: regenerate them with the `plot_*` / `q4_analysis.py` scripts, which only read the committed `data/` and `runs/` (no simulation needed). `scripts/legacy/` holds the earlier part-2/3 sweep scripts, superseded by `q2_offload.py`.
 

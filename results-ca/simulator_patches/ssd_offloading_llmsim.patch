@@ -29,7 +29,7 @@
  namespace llm_system {
  Sequence::Sequence(int expert_seq_id, int input_len, int output_len)
      : expert_seq_id(expert_seq_id),
-@@ -149,12 +158,111 @@
+@@ -149,12 +158,197 @@
    return total_length;
  }
  
@@ -43,6 +43,17 @@
 +//   seed:       RNG seed
 +//   log_file:   if set, every routing decision is written as
 +//               step,layer,seq,token,e_0,...,e_{k-1}
++//
++// model: router  -- mechanistic gating, as in a real MoE layer (Q4-extended):
++//   every token carries a hidden vector h (dimension router_dim) that
++//     * drifts between consecutive tokens of a sequence:
++//         x_t = token_similarity * x_{t-1} + sqrt(1 - token_similarity^2) * noise
++//     * is updated by each layer through the residual stream:
++//         h_0 = x_t,  h_l = rmsnorm(h_{l-1} + layer_update * tanh(A_l h_{l-1}))
++//   and the router of MoE layer l scores every expert and keeps the top-k:
++//         score_l = W_l h_l + b_l       (W_l, A_l, b_l fixed random per layer;
++//                                        b_l ~ N(0, router_bias) creates popular experts)
++//   keys: router_dim (64), token_similarity (0.9), layer_update (0.5), router_bias (0)
 +// ---------------------------------------------------------------------------
 +namespace {
 +struct RoutingConfig {
@@ -56,6 +67,12 @@
 +  std::vector<std::vector<int>> next_map;    // [layer][expert at l-1] -> expert at l
 +  std::map<int, std::vector<std::vector<int>>> prev_token;  // seq -> [layer][slot]
 +  std::map<int, std::vector<int>> prev_layer;               // seq -> [slot]
++  // model: router
++  int router_dim = 64;
++  double token_similarity = 0.9, layer_update = 0.5, router_bias = 0.0;
++  std::vector<std::vector<float>> W, A, b;                  // [layer] -> row-major matrices
++  std::map<int, std::pair<int, std::vector<float>>> token_x; // seq -> (token, content x_t)
++  std::map<long long, std::vector<float>> hidden;           // (seq, token) -> h at last layer
 +};
 +RoutingConfig rcfg;
 +long long route_call = 0;
@@ -70,6 +87,10 @@
 +    if (r["p_temporal"]) rcfg.p_temporal = r["p_temporal"].as<double>();
 +    if (r["p_spatial"]) rcfg.p_spatial = r["p_spatial"].as<double>();
 +    if (r["seed"]) rcfg.seed = r["seed"].as<unsigned>();
++    if (r["router_dim"]) rcfg.router_dim = r["router_dim"].as<int>();
++    if (r["token_similarity"]) rcfg.token_similarity = r["token_similarity"].as<double>();
++    if (r["layer_update"]) rcfg.layer_update = r["layer_update"].as<double>();
++    if (r["router_bias"]) rcfg.router_bias = r["router_bias"].as<double>();
 +    if (r["log_file"]) {
 +      rcfg.log.open(r["log_file"].as<std::string>());
 +      rcfg.log << "step,layer,seq,token,experts...\n";
@@ -83,6 +104,20 @@
 +    rcfg.popularity.push_back(ids);
 +    std::shuffle(ids.begin(), ids.end(), rcfg.gen);
 +    rcfg.next_map.push_back(ids);
++  }
++  if (rcfg.model == "router") {
++    const int d = rcfg.router_dim;
++    std::normal_distribution<float> g(0.0f, 1.0f / std::sqrt((float)d));
++    std::normal_distribution<float> gb(0.0f, (float)rcfg.router_bias);
++    for (int l = 0; l < num_layer; l++) {
++      std::vector<float> W(num_expert * d), A(d * d), b(num_expert, 0.0f);
++      for (auto &w : W) w = g(rcfg.gen);
++      for (auto &a : A) a = g(rcfg.gen);
++      if (rcfg.router_bias > 0) for (auto &x : b) x = gb(rcfg.gen);
++      rcfg.W.push_back(W);
++      rcfg.A.push_back(A);
++      rcfg.b.push_back(b);
++    }
 +  }
 +}
 +
@@ -129,6 +164,57 @@
 +  return chosen;
 +}
 +
++// model: router -- hidden-state gating (see the header comment above)
++std::vector<int> routerExperts(int seq_id, int token_id, int layer, int num_layer,
++                               int num_expert, int top_k) {
++  const int d = rcfg.router_dim;
++  const long long key = (long long)seq_id * 100000000LL + token_id;
++  std::vector<float> h;
++  if (layer == 0) {
++    // token content drifts from the previous token of the same sequence
++    std::normal_distribution<float> n(0.0f, 1.0f);
++    const float rho = (float)rcfg.token_similarity;
++    const float s = std::sqrt(std::max(0.0f, 1.0f - rho * rho));
++    auto it = rcfg.token_x.find(seq_id);
++    bool has_prev = it != rcfg.token_x.end() && it->second.first == token_id - 1;
++    h.resize(d);
++    for (int i = 0; i < d; i++)
++      h[i] = has_prev ? rho * it->second.second[i] + s * n(rcfg.gen) : n(rcfg.gen);
++    rcfg.token_x[seq_id] = {token_id, h};
++  } else {
++    // residual-stream update by this layer, then RMS normalisation
++    const std::vector<float> &prev = rcfg.hidden[key];
++    const std::vector<float> &A = rcfg.A[layer];
++    h.resize(d);
++    double ss = 0.0;
++    for (int i = 0; i < d; i++) {
++      float u = 0.0f;
++      for (int j = 0; j < d; j++) u += A[i * d + j] * prev[j];
++      h[i] = prev[i] + (float)rcfg.layer_update * std::tanh(u);
++      ss += (double)h[i] * h[i];
++    }
++    const float inv = 1.0f / (float)std::sqrt(ss / d + 1e-12);
++    for (auto &x : h) x *= inv;
++  }
++  // router: score every expert, keep the top-k
++  const std::vector<float> &W = rcfg.W[layer];
++  std::vector<std::pair<float, int>> score(num_expert);
++  for (int e = 0; e < num_expert; e++) {
++    float s = rcfg.b[layer][e];
++    for (int i = 0; i < d; i++) s += W[e * d + i] * h[i];
++    score[e] = {s, e};
++  }
++  std::partial_sort(score.begin(), score.begin() + top_k, score.end(),
++                    [](const std::pair<float, int> &a, const std::pair<float, int> &b) {
++                      return a.first > b.first;
++                    });
++  std::vector<int> chosen;
++  for (int j = 0; j < top_k; j++) chosen.push_back(score[j].second);
++  if (layer == num_layer - 1) rcfg.hidden.erase(key);
++  else rcfg.hidden[key] = h;
++  return chosen;
++}
++
  void BatchedSequence::update_expert(int num_expert, int top_k,
                                      bool need_new_expert) {
 +  // number of MoE layers = routing calls per decode step (leading dense layers have no router)
@@ -143,7 +229,7 @@
  
    static int expert_id = 0;
  
-@@ -183,15 +291,27 @@
+@@ -183,15 +377,29 @@
            num_token_in_expert[e_id] += 1;
          }
        } else {
@@ -152,6 +238,8 @@
 +        if (rcfg.model == "uniform") {
 +          std::set<int> drawn = scheduler->getRandomExpert(top_k);
 +          expert_list.assign(drawn.begin(), drawn.end());
++        } else if (rcfg.model == "router") {
++          expert_list = routerExperts(seq->id, token_id, cur_layer, num_layer, num_expert, top_k);
 +        } else {
 +          expert_list = drawRoutedExperts(seq->id, cur_layer, num_layer, num_expert, top_k);
 +        }

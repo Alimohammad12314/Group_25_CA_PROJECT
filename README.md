@@ -21,6 +21,7 @@ This repository is a fork of SSD-offloading. It adds our experiment scripts, res
 | Q2 Single GPU, no expert sharding, no Logic-PIM, experts in off-chip DRAM: expert loading vs execution time | [`results-ca/q2_offload_load_vs_exec/`](results-ca/q2_offload_load_vs_exec/README.md) |
 | Q3 MoE execution flow and why expert loading is the bottleneck | [`results-ca/q3_moe_flow_bottleneck/`](results-ca/q3_moe_flow_bottleneck/README.md) |
 | Q4 Temporal and spatial correlation of expert accesses | [`results-ca/q4_expert_correlation/`](results-ca/q4_expert_correlation/README.md) |
+| Q4-extended Do expert relations emerge from the router's own logic? | [`results-ca/q4_extended_router_logic/`](results-ca/q4_extended_router_logic/README.md) |
 
 The overview of all results is in [`results-ca/README.md`](results-ca/README.md).
 
@@ -64,7 +65,7 @@ If you cloned without `--recursive`, `setup.sh` fetches the submodules for you.
 `setup.sh` is safe to re-run. In order, it:
 1. fetches both submodules (and their nested Ramulator 2.0 submodule);
 2. applies the upstream patches: `ramulator2_pim.patch` (both simulators) and `patch/ssd_offloading.patch`;
-3. applies our patches from `results-ca/simulator_patches/` (see its [README](results-ca/simulator_patches/README.md)): PCIe link bandwidth option, A100 support, routing models and routing log, MoE-layer counter fix, expert-RNG bias fix, config caching, and the `llama3_70B` / `glam` presets;
+3. applies our patches from `results-ca/simulator_patches/` (see its [README](results-ca/simulator_patches/README.md)): PCIe link bandwidth option, A100 support, routing models (incl. the Q4-extended router model) and routing log, MoE-layer counter fix, expert-RNG bias fix, config caching, and the `llama3_70B` / `glam` presets;
 4. builds `LLMSimulator/build/run` and `external/LLMSimulator/build/run`.
 
 ### 3. Python packages
@@ -79,6 +80,7 @@ cd results-ca
 python3 scripts/plot_q1.py        # Q1 figures
 python3 scripts/plot_q2_q3.py     # Q2 + Q3 figures
 python3 scripts/q4_analysis.py    # Q4 statistics + figures (reads runs/*/routing_log.csv)
+python3 scripts/q4x_analysis.py --plots-only   # Q4-extended figures
 ```
 
 ### 5. Re-run the simulations (optional)
@@ -87,6 +89,7 @@ cd results-ca
 python3 scripts/q1_duplex.py          # 207 runs,  ~3 min on 28 cores
 python3 scripts/q2_offload.py         # 369 runs,  ~5 min
 python3 scripts/q4_routing_runs.py    # 12 runs,   ~5 min
+python3 scripts/q4x_router_runs.py   # 66 runs,   ~15 min (Q4-extended)
 ```
 Each script writes `data/` and `runs/` in its question folder. To use simulator builds elsewhere, set `LLMSIM_ROOT` (original) or `SSDSIM_ROOT` (SSD-offloading copy) to the simulator directory that contains `build/run`.
 
