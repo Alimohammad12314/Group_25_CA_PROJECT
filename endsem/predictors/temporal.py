@@ -1,4 +1,4 @@
-"""Temporal predictor (vote window, our design; ST-MoE's History Table is the W = 1 case).
+"""Temporal predictor (STEP's adaptive vote window [README ref 23]; ST-MoE's History Table is the W = 1 case).
 
 Per sequence and layer, every expert gets one vote for each appearance in the last W tokens,
 with a small bonus for recency so ties go to the newest token. W is adapted per layer:

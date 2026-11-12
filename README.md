@@ -29,7 +29,8 @@ This repository is a fork of SSD-offloading. It adds our experiment code, result
    - [Results at a glance](#results-at-a-glance): problem, prediction accuracy, where it helps, component contributions,
      context length, energy, bonus, expert-load latency, limitations
 2. [References: where each strategy comes from](#references-where-each-strategy-comes-from)
-   - [Strategies used in the design](#strategies-used-in-the-design)
+   - [What we took from each paper](#what-we-took-from-each-paper)
+   - [Strategies used in the design (by component)](#strategies-used-in-the-design-by-component)
    - [Simulators, traces and models](#simulators-traces-and-models)
    - [Reference list](#reference-list)
 3. [Mid-evaluation](#mid-evaluation) (Q1-Q4, Q4-extended)
@@ -51,6 +52,13 @@ Other documents: [`endsem/README.md`](endsem/README.md) (end-semester code and h
 
 Everything is in [`endsem/`](endsem/README.md). The design log with every decision and the full results is
 [`endsem/DESIGN.md`](endsem/DESIGN.md).
+
+![architecture](endsem/architecture.png)
+
+*How it fits together (`endsem/architecture.png`, drawn by `endsem/experiments/architecture_diagram.py`): the predictor
+turns routing history into a prediction stream; after each router decision the prefetcher queues copies on the DRAM→HBM
+link, demand misses go first, and the HBM cache keeps the experts most likely to be needed in the next 4 tokens. Grey labels
+name the source paper of each idea (table below).*
 
 | Requirement | What we did | Where |
 |---|---|---|
@@ -124,15 +132,42 @@ We re-implemented every idea below from the papers' descriptions inside our own 
 was copied from these systems. The strategies are combined in a way none of them uses (calibrated mixing, expected-value
 gate, predicted-need eviction), and all of it is training-free.
 
-### Strategies used in the design
+### What we took from each paper
+
+| # | Paper | What we took | Where it is in our design |
+|---|---|---|---|
+| [1] | ST-MoE (Zhao et al., arXiv 2026, course reference) | expert choices are correlated across adjacent layers (spatial) and consecutive tokens (temporal) | cross-layer counter tables; temporal predictor (`predictors/cross_layer.py`, `temporal.py`) |
+| [23] | STEP (Liu et al., ISCA 2026) | adaptive spatio-temporal prefetching: a temporal window that adapts, and switching extra prefetches off when prediction is poor | vote window whose size W grows/shrinks with its hit rate (`temporal.py`); δ = 0 off-switch at recall < 40 % (`budget.py`) |
+| [2] | APEX (Kanani et al., ESWEEK-TCAD 2026, course reference) | per-token adaptive prefetch count top-(k + δ); correctness-preserving mode (fetch missing experts, skip nothing) | adaptive budget (`budget.py`); miss overlap: run arrived experts first (`engine/timeline.py`) |
+| [3] | Pre-gated MoE (Hwang et al., ISCA 2024) | predict the next layer's experts and copy them while the current layer computes | one-layer-ahead prefetch, the base case of our lookahead (ours is training-free; theirs trains a pre-gate) |
+| [4] | ProMoE (Song et al., arXiv 2024) | prefetch several layers ahead; chunked copies; demand loads preempt prefetches | lookahead d ≤ 4; 16 MB chunks; two-queue link (`engine/link.py`) |
+| [5] | PopFetcher (Zhang et al., USENIX ATC 2025) | sliding-window expert popularity guides prefetching (a training system) | popularity predictor for inference (`predictors/popularity.py`) |
+| [6] | MoE-Infinity (Xue et al., arXiv 2024) | activation-aware expert caching across a request | retention of experts in HBM across tokens, guided by activation history (`engine/hbm.py`) |
+| [7] | Eliseev & Mazur (arXiv 2023) | LRU expert cache for offloaded Mixtral; adjacent tokens reuse experts | LRU baseline; supports the temporal predictor |
+| [8] | HybriMoE (Zhong et al., DAC 2025) | score-based expert caching instead of recency | score = predicted need + usage rate (`need` eviction) |
+| [9] | DAOP (Zhang et al., DATE 2025) | per-sequence activation patterns | per-sequence predictions combined into a batch view |
+| [10] | PreScope (Yu et al., arXiv 2025) | prefetching and demand loading compete for PCIe; decide with a cost model | expected-value gate p ≥ c / (1 + c) (our formula); demand-first link |
+| [11] | ExpertFlow (Shen et al., arXiv 2025) | adapt how far ahead to prefetch from runtime feedback | adaptive lookahead: smallest d whose compute covers the predicted load |
+| [12] | SPICE (arXiv 2026) | size the lookahead against PCIe transfer time and the compute window | link-time cap: prefetch only what can arrive in time |
+| [13] | Fate (Fang et al., arXiv 2025) | cross-layer gate inputs predict the next layer's experts | supports the cross-layer predictor and early-layer priority |
+| [16] | McFarling, combining branch predictors (DEC WRL 1993) | tournament: trust the predictor that has been right recently | chooser: weight = recent recall² (`predictors/chooser.py`) |
+| [17] | Belady (IBM Systems Journal 1966) | optimal replacement: evict what is needed furthest in the future | oracle upper bound for eviction |
+| [22] | ExpertFlow (He et al., arXiv 2024) | batch-level view of expert activation | batch union P(e) = 1 − ∏ (1 − q_b(e)) |
+| [18], [19] | Duplex (MICRO 2024); SSD-offloading (IEEE CAL 2025) | simulators and energy model | all time and energy costs (`engine/costs.py`), bonus replay |
+| [15], [21] | Orders in Chaos (arXiv 2025); OLMoE (arXiv 2024) | public routing traces | DeepSeek-R1, Llama-4 and Mixtral traces (`traces/download.py`) |
+
+Our own additions, not from any paper: rank calibration before mixing predictors, the expected-value gate formula, the
+predicted-need eviction score P(used within 4 tokens), the trace-replay mode in LLMSimulator, and the trace-driven timeline.
+
+### Strategies used in the design (by component)
 
 | Component in our design | Idea taken | From | How we use it |
 |---|---|---|---|
 | Cross-layer predictor (`predictors/cross_layer.py`) | experts at layer l predict experts at layer l+d; counters over (expert at l, expert at l+d) | ST-MoE [1] | per-(distance, layer) 4-bit counter tables, d = 1 … 4 |
-| Temporal predictor (`predictors/temporal.py`) | consecutive tokens reuse experts | ST-MoE [1]; adjacent-token reuse also reported in [7] | vote over the last W tokens of each sequence; W grows or shrinks with its own hit rate (our design) |
+| Temporal predictor (`predictors/temporal.py`) | consecutive tokens reuse experts | ST-MoE [1], STEP [23]; adjacent-token reuse also reported in [7] | vote over the last W tokens of each sequence; W grows or shrinks with its own hit rate (adaptive window from STEP) |
 | Popularity prior (`predictors/popularity.py`) | prefetch the experts that are currently popular, from a sliding window | PopFetcher [5] (a training system; we apply the idea to inference) | 64-step window of activation counts per layer |
 | Prefetching one layer ahead | predict the next layer's experts and copy them while the current layer computes | Pre-gated MoE [3] (uses a trained pre-gate; ours is training-free) | the base case of our lookahead |
-| Adaptive budget (`predictors/budget.py`) | fetch a per-token adaptive number of experts, top-(k + δ), instead of a fixed number | APEX [2] | δ from the empirical distribution of how deep in the ranking routed experts fall; δ = 0 when recall is low |
+| Adaptive budget (`predictors/budget.py`) | fetch a per-token adaptive number of experts, top-(k + δ), instead of a fixed number | APEX [2]; off-switch from STEP [23] | δ from the empirical distribution of how deep in the ranking routed experts fall; δ = 0 when recall is low |
 | Run arrived experts while missing ones load | correctness-preserving mode: missing experts are fetched, nothing is skipped | APEX [2] | "miss overlap" in `engine/timeline.py` |
 | Multi-layer lookahead, chunked copies, demand preempts prefetch | sliding-window prefetch d layers ahead; chunked prefetch with early preemption | ProMoE [4] | lookahead up to 4 layers; 16 MB chunks; a demand miss jumps ahead of queued prefetches |
 | Adaptive lookahead distance | adjust how far ahead to prefetch from runtime feedback | ExpertFlow [11] | smallest distance whose compute time covers the predicted load |
@@ -178,9 +213,8 @@ gate, predicted-need eviction), and all of it is training-free.
 20. H. Luo et al. *Ramulator 2.0: A Modern, Modular, and Extensible DRAM Simulator*. IEEE Computer Architecture Letters, 2023.
 21. N. Muennighoff et al. *OLMoE: Open Mixture-of-Experts Language Models*. arXiv:2409.02060, 2024.
 22. X. He et al. *ExpertFlow: Optimized Expert Activation and Token Allocation for Efficient Mixture-of-Experts Inference*. arXiv:2410.17954, 2024.
+23. F. Liu, N. Yang, Z. Wang, C. Guan, H. Li, Y. Feng, L. Lu, X. Li, S. Yang, J. Wang, L. Qu, L. Jiang, H. Guan. *STEP: Adaptive Spatio-Temporal Expert Prefetching for Low-Latency and Memory-Efficient MoE Inference*. ISCA 2026. IEEE Xplore document 11617726.
 
-Note: our planning notes called the temporal vote window "STEP"; we could not find a published paper of that name, so the
-window and its adaptive size are listed as our own design, built on the token-to-token correlation reported in [1] and [7].
 
 ## Mid-evaluation
 

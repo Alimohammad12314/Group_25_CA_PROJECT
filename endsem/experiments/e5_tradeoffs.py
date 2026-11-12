@@ -7,7 +7,7 @@
   B. Prefetch aggressiveness. Fixed budgets top-k, top-(k+1), top-(k+2), top-(k+4) against the adaptive
      budget at tau 0.6 / 0.75 / 0.9, with and without the expected-value gate: latency vs traffic vs
      energy (APEX: static top-(k+8) used the most energy of all policies).
-  C. Off-switch: the adaptive budget with and without the 40 % off-switch.
+  C. Off-switch: the adaptive budget with and without STEP's 40 % off-switch.
   D. Predictor state size (bits) per model, against ST-MoE's 256-entry x 8-candidate x 10-bit table.
 
     python -m experiments.e5_tradeoffs [--models ...]
