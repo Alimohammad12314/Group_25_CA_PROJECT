@@ -10,7 +10,7 @@ extra budget that would have covered every needed expert:
 
 The budget for the next prediction of that layer is K_hat + the tau-quantile of the last `hist`
 delta* values, so tau is the target full-coverage rate. When the layer's recent recall falls under
-`off_threshold` the extra budget is set to zero (STEP's off-switch): extra guesses from a predictor
+`off_threshold` the extra budget is set to zero (off-switch, our design): extra guesses from a predictor
 that is mostly wrong are mostly wasted traffic. The link-time cap (SpecPrefetch) is applied later,
 in the timeline, because it depends on how busy the link is.
 """
