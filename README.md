@@ -55,10 +55,17 @@ Everything is in [`endsem/`](endsem/README.md). The design log with every decisi
 
 ![architecture](endsem/architecture.png)
 
-*How it fits together (`endsem/architecture.png`, drawn by `endsem/experiments/architecture_diagram.py`): the predictor
-turns routing history into a prediction stream; after each router decision the prefetcher queues copies on the DRAM→HBM
-link, demand misses go first, and the HBM cache keeps the experts most likely to be needed in the next 4 tokens. Grey labels
-name the source paper of each idea (table below).*
+**Figure: architecture.** Blue = control path (predictions), grey = data path (expert weights).
+
+- ① At every MoE layer the router picks the batch's experts (replayed from the real traces).
+- ② The predictor turns this routing history into the probability that each expert is needed at layers l+1 … l+4.
+- ③ The prefetcher picks what to copy: up to 4 layers ahead, only what the link can deliver in time, and only when the
+  expected saving beats the cost.
+- ④ The PCIe / NVLink-C2C link moves expert weights from host DRAM to HBM; demand misses preempt prefetches at 16 MB chunks.
+- ⑤ The HBM expert cache evicts the expert least likely to be needed in the next 4 tokens.
+- ⑥ Experts execute as soon as their weights arrive; nothing is skipped.
+
+The source paper of each idea is in the [table below](#what-we-took-from-each-paper).
 
 | Requirement | What we did | Where |
 |---|---|---|
