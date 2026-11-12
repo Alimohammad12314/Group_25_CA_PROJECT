@@ -6,6 +6,8 @@ Hugging Face** in a trace-driven timeline whose costs come from LLMSimulator / S
 (the mid-evaluation Q2 runs). The design log, with every decision and why, is in
 [DESIGN.md](DESIGN.md).
 
+![architecture](architecture.png)
+
 ## Folder map
 
 ```
@@ -41,7 +43,9 @@ endsem/
 │   ├── e5_tradeoffs.py         predictor overhead, budget vs traffic and energy
 │   ├── ctx_base_runs.py        LLMSimulator base pass at context 256-4096 (costs for e6)
 │   ├── e6_context.py           sensitivity to context length (KV time + HBM left for experts)
-│   └── bonus_llmsim_replay.py  bonus: real routing replayed inside LLMSimulator, prefetcher on that traffic
+│   ├── bonus_llmsim_replay.py  bonus: real routing replayed inside LLMSimulator, prefetcher on that traffic
+│   ├── readme_figures.py       docs/figures/*.png for the repository README
+│   └── architecture_diagram.py architecture.png
 ├── results/       CSV tables per experiment (plots/*.png are regenerated, not committed)
 ├── tests/         unit tests (link preemption, ranks, counters, budget, gate)
 └── data/          downloaded traces and cached streams (not committed; regenerate below)
