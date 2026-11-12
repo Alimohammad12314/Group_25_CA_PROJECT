@@ -53,17 +53,22 @@ Other documents: [`endsem/README.md`](endsem/README.md) (end-semester code and h
 Everything is in [`endsem/`](endsem/README.md). The design log with every decision and the full results is
 [`endsem/DESIGN.md`](endsem/DESIGN.md).
 
-![architecture](endsem/architecture_v2.png)
+![architecture](endsem/architecture_v3.png)
 
-**Figure: architecture.** Blue = control path (predictions), grey = data path (expert weights).
+**Figure: architecture.** Blue = control path (predictions), grey = data path (expert weights). The numbers follow
+one MoE layer in order:
 
-- ① At every MoE layer the router picks the batch's experts (replayed from the real traces).
-- ② The predictor turns this routing history into the probability that each expert is needed at layers l+1 … l+4.
-- ③ The prefetcher picks what to copy: up to 4 layers ahead, only what the link can deliver in time, and only when the
-  expected saving beats the cost.
-- ④ The PCIe / NVLink-C2C link moves expert weights from host DRAM to HBM; demand misses preempt prefetches at 16 MB chunks.
-- ⑤ The HBM expert cache evicts the expert least likely to be needed in the next 4 tokens.
-- ⑥ Experts execute as soon as their weights arrive; nothing is skipped.
+1. The **router** picks this layer's experts for every sequence in the batch (replayed from the real trace).
+2. That choice is sent to the **predictor** as history: the predictor only ever learns from what the router really did.
+3. The predictor estimates P(expert) for the next layers l+1 … l+4 and hands it to the **prefetcher**.
+4. The prefetcher requests the likely experts early (up to 4 layers ahead, only what the link can deliver in time,
+   only when the expected saving beats the cost).
+5. The **PCIe / NVLink-C2C link** copies expert weights from host DRAM into HBM; demand misses preempt prefetches at
+   16 MB chunks.
+6. The predictor's scores also decide what the **HBM expert cache** evicts (the expert least likely needed in the
+   next 4 tokens).
+7. The **experts** run on weights already in HBM (any still loading run as soon as they arrive), and the next layer
+   starts again at step 1.
 
 The source paper of each idea is in the [table below](#what-we-took-from-each-paper).
 
