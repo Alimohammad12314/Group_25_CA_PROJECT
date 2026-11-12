@@ -190,18 +190,47 @@ prompts, for example `openai/gsm8k` (math) and `openai_humaneval` (code): 50 pro
 **router probabilities** (top-8 softmax per token and layer). These allow probability-based predictors (FineMoE-style)
 that the public trace cannot support.
 
-Also write LLMSimulator replay files, `expert_data/experts_mixtral_<dataset>.csv`, in the format
-`Scheduler::initExpertList` reads (top-2 only, which fits Mixtral):
+LLMSimulator replay of these live traces uses the patched simulator's `routing.model: trace` (any top-k); the engine side
+is `experiments/bonus_llmsim_replay.py`, which writes the replay file from a workload (`write_trace`). No separate CSV
+format is needed.
+
+### B″ — hidden-state predictor (`hs_predictor.py` → `results/hs_pred_b{B}_ctx{ctx}.npz`) — **do this, high priority**
+
+**Why.** The public traces contain expert IDs only. An ID-only lookup table fitted to the test data itself reaches only
+46 % next-layer overlap on Mixtral (52 % with the previous token), and our predictor gets 43.5 %. Papers that report
+80–90 % use the model's hidden state, which only this run has.
+
+**What (training-free, uses the model's own weights).** Mixtral's residual stream changes little from layer to layer,
+so layer (l+d)'s router applied to the hidden state at layer l is a good guess of layer (l+d)'s experts:
 
 ```
-seq_0
-Lin <prompt tokens>
-Sum
-<e1> <e2>      # one line per (layer, token), LAYER-major: all prompt tokens of layer 0, then layer 1, ...
-Gen
-<e1> <e2>      # one line per (token, layer), TOKEN-major: decode token 0 layers 0..31, token 1 ...
-Lout <decode tokens>
+h_l      = residual stream entering layer l's MoE block (after attention + residual add), one vector per token
+q[l+d]   = softmax( W_router[l+d] · RMSNorm_{l+d}(h_l) )      for d = 1 … 4, l + d < 32
+           W_router[l+d] = model.layers[l+d].block_sparse_moe.gate.weight        (8 × 4096)
+           RMSNorm_{l+d} = model.layers[l+d].post_attention_layernorm           (its own weight)
+q[l, d=0]= the previous token's real router probabilities at layer l
 ```
+
+- All 32 routers + norms are about 2 MB: keep them on the GPU. Extra cost: 4 small GEMVs per layer per token.
+- Also try variant **B** (no renorm: `W_router[l+d] · x_l`, where `x_l` is layer l's own router input) on 8 documents and
+  keep whichever has higher d = 1 overlap. Report both numbers.
+- Record, per decode step s, sequence b, target layer l and distance d, **all 8 probabilities** (float16), and the
+  routing the model actually chose. Save one file per (batch, ctx):
+
+```python
+np.savez("results/hs_pred_b{B}_ctx{ctx}.npz",
+         q=q,             # float16 [S, B, L=32, D+1=5, N=8]   q[s, b, l, d] = prediction FOR layer l made d layers earlier
+         A=A,             # int16   [S, B, L, 2]               experts the router actually picked
+         doc_ids=doc_ids, tokens_per_request=128, offset=ctx)
+```
+
+- Same documents and teacher-forced decode as section 4. Minimum: batch {1, 4, 16} × ctx 1024. Then ctx {256, 1536}.
+- Size: batch 16 is 128 × 16 × 32 × 5 × 8 × 2 B ≈ 2.6 MB per file.
+- **Evaluate here:** `python -m experiments.e7_hidden_state --gpu H100 --calibration gpu/results/calibration_h100.json`
+  prints overlap / recall / precision by distance for the hidden-state and ID-only predictors on the same tokens, and
+  the speedups of every policy with each predictor. Paste these tables into `gpu/README.md`.
+- **Use it live (C5 in Phase C):** in the runtime's replay mode, drive the prefetcher with these predictions computed
+  on the fly instead of the engine stream (same batch union `1 − ∏(1 − q_b)` and budget `ceil(Σ P)`).
 
 ## 7. Phase C — the run matrix (`run_matrix.py` → `results/real_runs.csv`)
 
@@ -215,10 +244,11 @@ Configurations, the same as the engine (`experiments/common.py`):
 | C2 predict-evict | prediction without prefetching | need (stream `full`) | – | yes |
 | C3 prefetch + LRU | prediction-driven prefetching | LRU | naive: top-M, lookahead 1, FIFO | no |
 | C4 full design | complete implementation | need | full: adaptive lookahead ≤ 4, demand priority, link cap, stale cancel, value gate | yes |
+| C5 full design, hidden-state predictor | complete implementation, better predictor | need (scores from B″) | full, driven by B″ predictions computed live | yes |
 | O oracle | upper bound | need | oracle (true experts) | yes |
 
 Sweep, in priority order (stop wherever time runs out):
-1. **Minimum:** batch {1, 16} × ctx 1024 × cache {25%, 50%} × all 7 configurations.
+1. **Minimum:** batch {1, 16} × ctx 1024 × cache {25%, 50%} × all 8 configurations (C0–C5, O).
 2. **Context:** batch {1, 16} × ctx {256, 512, 1536} × cache 25% × {C1, C2, C4, O}.
 3. **Batch 4** at ctx 1024.
 4. **Lookahead / aggressiveness:** C4 with lookahead cap {1, 2, 4} and τ {0.6, 0.75, 0.9} at batch 16, ctx 1024, cache 25%.
@@ -284,7 +314,8 @@ Plots: real vs simulated token latency per configuration (bars, both cost profil
 
 ## 11. Bring back
 
-Commit `endsem/gpu/*.py` and `endsem/gpu/results/` (CSV/JSON, plus `env.txt`). **Never commit** model weights,
+Commit `endsem/gpu/*.py` and `endsem/gpu/results/` (CSV/JSON, `hs_pred_*.npz`, plus `env.txt`), and write the
+measured tables into `endsem/gpu/README.md`. **Never commit** model weights,
 traces or streams. Keep plots out of git as well (they regenerate). Send the `results/` folder back so the report
 tables can be built from it.
 

@@ -44,6 +44,7 @@ endsem/
 │   ├── ctx_base_runs.py        LLMSimulator base pass at context 256-4096 (costs for e6)
 │   ├── e6_context.py           sensitivity to context length (KV time + HBM left for experts)
 │   ├── bonus_llmsim_replay.py  bonus: real routing replayed inside LLMSimulator, prefetcher on that traffic
+│   ├── e7_hidden_state.py      hidden-state predictor measured on the H100 vs ID-only (needs GPU.md Phase B″)
 │   ├── readme_figures.py       docs/figures/*.png for the repository README
 │   └── architecture_diagram.py architecture_v3.png
 ├── results/       CSV tables per experiment (plots/*.png are regenerated, not committed)
