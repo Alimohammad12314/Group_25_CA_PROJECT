@@ -38,7 +38,10 @@ endsem/
 │   ├── e2_predictor_accuracy.py Deliverable 1: overlap, coverage, precision
 │   ├── e3_ablation.py          what each component adds
 │   ├── e4_sweeps.py            Deliverables 3-4: link x cache x batch x model
-│   └── e5_tradeoffs.py         predictor overhead, budget vs traffic and energy
+│   ├── e5_tradeoffs.py         predictor overhead, budget vs traffic and energy
+│   ├── ctx_base_runs.py        LLMSimulator base pass at context 256-4096 (costs for e6)
+│   ├── e6_context.py           sensitivity to context length (KV time + HBM left for experts)
+│   └── bonus_llmsim_replay.py  bonus: real routing replayed inside LLMSimulator, prefetcher on that traffic
 ├── results/       CSV tables per experiment (plots/*.png are regenerated, not committed)
 ├── tests/         unit tests (link preemption, ranks, counters, budget, gate)
 └── data/          downloaded traces and cached streams (not committed; regenerate below)
@@ -49,7 +52,7 @@ endsem/
 ```bash
 cd endsem
 uv venv .venv --python 3.10 && . .venv/bin/activate
-uv pip install numpy pandas matplotlib huggingface_hub scipy pytest
+uv pip install numpy pandas matplotlib huggingface_hub scipy pytest pyyaml
 
 # 1. traces
 python -m traces.download mixtral                       # open dataset
@@ -66,7 +69,12 @@ python -m experiments.e2_predictor_accuracy
 python -m experiments.e3_ablation
 python -m experiments.e4_sweeps
 python -m experiments.e5_tradeoffs
+python -m experiments.ctx_base_runs                     # needs the built SSD-offloading simulator (../setup.sh)
+python -m experiments.e6_context
+python -m experiments.bonus_llmsim_replay               # needs the built simulator; ~15 min
 ```
+
+Real-GPU validation on an H100 (real Mixtral weights, same traces): see [GPU.md](GPU.md).
 
 Every experiment takes `--models` to restrict the run. Prediction streams are cached in
 `data/streams/`; delete that folder after changing anything in `predictors/`.
@@ -75,5 +83,10 @@ Every experiment takes `--models` to restrict the run. Prediction streams are ca
 - Times in ms per decode step (one token per sequence of the batch), energy in J per token.
 - GPU A100-80GB unless `--gpu H100`; FP16 weights; all routed experts live in host DRAM, HBM holds
   a bounded cache of them (ratio = share of all routed experts; "physical" = what fits in 80 GB
-  after non-expert weights and a 1024-token KV cache).
+  after non-expert weights and the KV cache).
+- Context 1024 tokens unless set (`SimConfig.context`; e6 sweeps 256-4096).
+- Expert-load latency columns: `expert_load_wire_ms` (one expert on an idle link),
+  `expert_load_latency_ms` / `_p95_ms` (issue to arrival of every copy, including queueing),
+  `demand_load_latency_ms` (demand copies only), `expert_wait_ms` (wait per needed expert, 0 for hits),
+  `miss_wait_ms` / `_p95_ms` (same, non-resident experts only).
 - Cache ratio 0 means no retention: every expert is evicted after its layer runs.

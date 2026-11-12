@@ -34,6 +34,7 @@ class Link:
         self.pending_bytes = 0.0
         self.busy_time = 0.0
         self.bytes_moved = 0.0
+        self.load_latency = []          # (finish - issue, was_spec) of every completed transfer
 
     # --- queue management ------------------------------------------------------------------
     def enqueue(self, tr):
@@ -109,6 +110,7 @@ class Link:
             if tr.done >= tr.nbytes - 1e-6:
                 tr.finish = self.t
                 q.popleft()
+                self.load_latency.append((tr.finish - tr.arrival, tr.was_spec))
 
     def _to_boundary(self, tr, when):
         """Bytes of tr that run before stopping at the first chunk boundary at or after `when`."""

@@ -42,3 +42,6 @@ midterm/
 # ---- large regenerable data ----
 # Q4-extended DeepSeek routing logs (147 MB); regenerate with results-ca/scripts/q4x_router_runs.py
 results-ca/q4_extended_router_logic/runs/deepseekR1_*/routing_log.csv
+
+# ---- README figures are the one exception to the image rule ----
+!docs/figures/*.png

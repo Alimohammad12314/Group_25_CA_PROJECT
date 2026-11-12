@@ -47,7 +47,23 @@ E_LINK_J_PER_BIT = (9.2 + 4.2) * 1e-12
 E_HBM_READ_J_PER_BIT = 4.2e-12
 P_BG_GPU_W = 70.0
 P_BG_HOST_W = 57.0
-CONTEXT_TOKENS = 1024          # Q2 runs used context 1024
+CONTEXT_TOKENS = 1024          # Q2 runs used context 1024 (the default context everywhere)
+CTX_TABLE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "results", "context_base",
+                         "context_base.csv")   # experiments/ctx_base_runs.py: Q2 base pass at other contexts
+
+
+@functools.lru_cache(maxsize=None)
+def _ctx_table():
+    if not os.path.exists(CTX_TABLE):
+        raise FileNotFoundError(f"{CTX_TABLE} missing: run python -m experiments.ctx_base_runs")
+    return pd.read_csv(CTX_TABLE)
+
+
+@functools.lru_cache(maxsize=None)
+def _calibration(path):
+    import json
+    with open(path) as fh:
+        return json.load(fh)
 
 
 @functools.lru_cache(maxsize=None)
@@ -75,10 +91,18 @@ def _roofline_expert_s(model, gpu, n_tokens):
 
 
 class CostModel:
-    """All costs for one (GPU, model, link, batch) point. Times in seconds, energy in joules."""
+    """All costs for one (GPU, model, link, batch, context) point. Times in seconds, energy in joules.
 
-    def __init__(self, gpu, model, link, batch):
+    context      KV-cache length during decode. 1024 is Q2's setting; other values scale the non-expert
+                 time and energy by LLMSimulator's base pass at that context (results/context_base/)
+                 and shrink the HBM left for experts.
+    calibration  optional JSON measured on a real GPU (GPU.md Phase A): replaces link bandwidth,
+                 expert execution time t_exec(n), non-expert time and the contention factor.
+    """
+
+    def __init__(self, gpu, model, link, batch, context=CONTEXT_TOKENS, calibration=None):
         self.gpu, self.model, self.link, self.batch = gpu, model, link, batch
+        self.context = int(context)
         m = MODELS[model]
         self.N, self.k, self.L = m["N"], m["k"], m["moe_layers"]
         self.expert_bytes = expert_bytes(model)
@@ -92,6 +116,8 @@ class CostModel:
         self._q2 = rows.set_index("batch")
         base = runs[(runs.gpu == gpu) & (runs.model == model) & (runs["mode"] == "base")].set_index("batch")
         self.t_nonexpert_layer = self._interp(rows.batch.values, rows.non_expert_ms.values, batch) * 1e-3 / self.L
+        ctx_t, ctx_e = self._context_scale()
+        self.t_nonexpert_layer *= ctx_t
 
         # Calibrate the roofline to Q2's batch-1 expert time (one constant per GPU and model).
         b1 = rows[rows.batch == 1].iloc[0]
@@ -105,11 +131,56 @@ class CostModel:
         ne_cols = ["fc_dram", "fc_comp", "attn_dram", "attn_comp", "ffn_dram", "ffn_comp",
                    "shared_moe_hbm", "shared_moe_comp"]
         ne_nj = base[ne_cols].sum(axis=1)
-        self.e_nonexpert_step = self._interp(ne_nj.index.values, ne_nj.values, batch) * 1e-9
+        self.e_nonexpert_step = self._interp(ne_nj.index.values, ne_nj.values, batch) * 1e-9 * ctx_e
         b1r = base.loc[1]
         self.e_comp_token_expert = b1r.moe_comp * 1e-9 / (self.L * self.k)
         self.e_hbm_expert = self.expert_bytes * 8 * E_HBM_READ_J_PER_BIT
         self.e_link_byte = 8 * E_LINK_J_PER_BIT
+        self.calibrated = calibration is not None
+        if calibration is not None:
+            self._apply_calibration(_calibration(os.path.abspath(calibration)), max_tok)
+
+    def _context_scale(self):
+        """(time, energy) multipliers for non-expert work at self.context relative to context 1024."""
+        if self.context == CONTEXT_TOKENS:
+            return 1.0, 1.0
+        t = _ctx_table()
+        t = t[(t.gpu == self.gpu) & (t.model == self.model)]
+        out = []
+        for col in ("non_expert_ms", "nonexpert_dyn_nJ"):
+            ratios = []
+            for b, grp in t.groupby("batch"):
+                g = grp.sort_values("context")
+                ref = float(g[g.context == CONTEXT_TOKENS][col].iloc[0])
+                ratios.append((b, float(np.interp(self.context, g.context.values, g[col].values)) / ref))
+            bs, rs = zip(*ratios)
+            out.append(self._interp(np.array(bs), np.array(rs), self.batch))
+        return tuple(out)
+
+    def _apply_calibration(self, cal, max_tok):
+        if cal.get("link_GBps"):
+            self.link_bw = cal["link_GBps"] * 1e9
+            self.t_load_expert = self.expert_bytes / self.link_bw
+            self.contention_factor = self.hbm_bw / (self.hbm_bw - self.link_bw)
+        if cal.get("t_exec_s"):
+            ns = np.array(sorted(int(n) for n in cal["t_exec_s"]), float)
+            ts = np.array([cal["t_exec_s"][str(int(n))] for n in ns])
+            self._t_exec = np.array([0.0] + [float(np.interp(n, ns, ts)) for n in range(1, max_tok + 1)])
+        tab = cal.get("t_nonexpert_layer_s") or {}
+        pts = [(int(k.split("_")[0][1:]), int(k.split("ctx")[1]), v) for k, v in tab.items() if "ctx" in k]
+        if pts:
+            # nearest measured batch (log scale), linear in context (attention is linear in context)
+            bs = sorted({p[0] for p in pts})
+            b = min(bs, key=lambda x: abs(np.log(x) - np.log(self.batch)))
+            cs = sorted((p[1], p[2]) for p in pts if p[0] == b)
+            xs, ys = [c for c, _ in cs], [v for _, v in cs]
+            if len(xs) >= 2 and (self.context < xs[0] or self.context > xs[-1]):
+                slope, icpt = np.polyfit(xs, ys, 1)          # extrapolate the linear trend
+                self.t_nonexpert_layer = float(max(icpt + slope * self.context, min(ys)))
+            else:
+                self.t_nonexpert_layer = float(np.interp(self.context, xs, ys))
+        if cal.get("contention_factor"):
+            self.contention_factor = float(cal["contention_factor"])
 
     @staticmethod
     def _interp(xs, ys, x):
@@ -131,6 +202,6 @@ class CostModel:
         m = MODELS[self.model]
         all_experts = self.N * self.L * self.expert_bytes
         nonexpert = max(m["total_params_B"] * 1e9 * PRECISION_BYTES - all_experts, 0.0)
-        kv = m["kv_bytes_per_token"] * CONTEXT_TOKENS * self.batch
+        kv = m["kv_bytes_per_token"] * self.context * self.batch
         free = GPUS[self.gpu]["hbm_bytes"] - nonexpert - kv
         return float(np.clip(free / all_experts, 0.0, 1.0))

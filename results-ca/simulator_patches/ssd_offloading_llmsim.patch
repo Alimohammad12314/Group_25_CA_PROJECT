@@ -13,7 +13,7 @@
  
 --- a/src/scheduler/sequence.cpp
 +++ b/src/scheduler/sequence.cpp
-@@ -2,6 +2,15 @@
+@@ -2,6 +2,16 @@
  
  #include "scheduler/scheduler.h"
  
@@ -25,11 +25,12 @@
 +#include <map>
 +#include <numeric>
 +#include <random>
++#include <stdexcept>
 +
  namespace llm_system {
  Sequence::Sequence(int expert_seq_id, int input_len, int output_len)
      : expert_seq_id(expert_seq_id),
-@@ -149,12 +158,197 @@
+@@ -149,12 +159,232 @@
    return total_length;
  }
  
@@ -54,6 +55,12 @@
 +//         score_l = W_l h_l + b_l       (W_l, A_l, b_l fixed random per layer;
 +//                                        b_l ~ N(0, router_bias) creates popular experts)
 +//   keys: router_dim (64), token_similarity (0.9), layer_update (0.5), router_bias (0)
++//
++// model: trace  -- replay real routing (end-sem bonus), any top-k:
++//   trace_file: text file, first line "n_seq n_tok n_layer k", then n_seq*n_tok*n_layer lines of
++//               k expert ids, ordered (sequence, decode token, MoE layer).
++//   The i-th distinct simulator sequence replays trace sequence i % n_seq, and its decode tokens
++//   replay trace tokens 0, 1, 2, ... (wrapping after n_tok).
 +// ---------------------------------------------------------------------------
 +namespace {
 +struct RoutingConfig {
@@ -73,6 +80,11 @@
 +  std::vector<std::vector<float>> W, A, b;                  // [layer] -> row-major matrices
 +  std::map<int, std::pair<int, std::vector<float>>> token_x; // seq -> (token, content x_t)
 +  std::map<long long, std::vector<float>> hidden;           // (seq, token) -> h at last layer
++  // model: trace
++  int t_seq = 0, t_tok = 0, t_layer = 0, t_k = 0;
++  std::vector<int> trace;                                   // [seq][tok][layer][k]
++  std::map<int, int> trace_slot;                            // simulator seq id -> trace sequence
++  std::map<int, int> trace_start;                           // simulator seq id -> first token id
 +};
 +RoutingConfig rcfg;
 +long long route_call = 0;
@@ -91,6 +103,16 @@
 +    if (r["token_similarity"]) rcfg.token_similarity = r["token_similarity"].as<double>();
 +    if (r["layer_update"]) rcfg.layer_update = r["layer_update"].as<double>();
 +    if (r["router_bias"]) rcfg.router_bias = r["router_bias"].as<double>();
++    if (rcfg.model == "trace") {
++      std::ifstream tf(r["trace_file"].as<std::string>());
++      if (!tf.is_open()) throw std::runtime_error("routing.trace_file cannot be opened");
++      tf >> rcfg.t_seq >> rcfg.t_tok >> rcfg.t_layer >> rcfg.t_k;
++      if (rcfg.t_layer != num_layer)
++        throw std::runtime_error("routing trace has a different number of MoE layers");
++      rcfg.trace.resize((size_t)rcfg.t_seq * rcfg.t_tok * rcfg.t_layer * rcfg.t_k);
++      for (auto &x : rcfg.trace) tf >> x;
++      if (!tf) throw std::runtime_error("routing trace is truncated");
++    }
 +    if (r["log_file"]) {
 +      rcfg.log.open(r["log_file"].as<std::string>());
 +      rcfg.log << "step,layer,seq,token,experts...\n";
@@ -164,6 +186,20 @@
 +  return chosen;
 +}
 +
++// model: trace -- replay recorded routing (see the header comment above)
++std::vector<int> traceExperts(int seq_id, int token_id, int layer, int top_k) {
++  if (top_k != rcfg.t_k) throw std::runtime_error("routing trace top-k differs from the model");
++  auto it = rcfg.trace_slot.find(seq_id);
++  if (it == rcfg.trace_slot.end()) {
++    int slot = (int)rcfg.trace_slot.size() % rcfg.t_seq;
++    it = rcfg.trace_slot.emplace(seq_id, slot).first;
++    rcfg.trace_start[seq_id] = token_id;
++  }
++  const int t = (token_id - rcfg.trace_start[seq_id]) % rcfg.t_tok;
++  const size_t base = (((size_t)it->second * rcfg.t_tok + t) * rcfg.t_layer + layer) * rcfg.t_k;
++  return std::vector<int>(rcfg.trace.begin() + base, rcfg.trace.begin() + base + top_k);
++}
++
 +// model: router -- hidden-state gating (see the header comment above)
 +std::vector<int> routerExperts(int seq_id, int token_id, int layer, int num_layer,
 +                               int num_expert, int top_k) {
@@ -229,7 +265,7 @@
  
    static int expert_id = 0;
  
-@@ -183,15 +377,29 @@
+@@ -183,15 +413,31 @@
            num_token_in_expert[e_id] += 1;
          }
        } else {
@@ -238,6 +274,8 @@
 +        if (rcfg.model == "uniform") {
 +          std::set<int> drawn = scheduler->getRandomExpert(top_k);
 +          expert_list.assign(drawn.begin(), drawn.end());
++        } else if (rcfg.model == "trace") {
++          expert_list = traceExperts(seq->id, token_id, cur_layer, top_k);
 +        } else if (rcfg.model == "router") {
 +          expert_list = routerExperts(seq->id, token_id, cur_layer, num_layer, num_expert, top_k);
 +        } else {

@@ -32,6 +32,8 @@ class SimConfig:
     gpu: str = "A100"
     link: str = "C2C-900"
     cache_ratio: float = 0.5         # share of all routed experts HBM can hold; 0 = no retention
+    context: int = 1024              # KV-cache length: sets attention time/energy (engine/costs.py)
+    calibration: str = ""            # optional real-GPU calibration JSON (GPU.md Phase A)
     eviction: str = "lru"            # lru | lfu | need | belady
     prefetch: bool = False
     lookahead: str = "fixed"         # fixed | adaptive
@@ -56,7 +58,8 @@ class Timeline:
     def __init__(self, wl, needed, stream, cfg: SimConfig):
         self.wl, self.needed, self.stream, self.cfg = wl, needed, stream, cfg
         self.S, self.B, self.L, self.N = wl.S, wl.B, wl.L, wl.num_experts
-        self.cost = CostModel(cfg.gpu, wl.model, cfg.link, wl.B)
+        self.cost = CostModel(cfg.gpu, wl.model, cfg.link, wl.B, context=cfg.context,
+                              calibration=cfg.calibration or None)
         c = self.cost
         self.retention = cfg.cache_ratio > 0
         total = self.N * self.L
@@ -82,6 +85,7 @@ class Timeline:
         self.layer_stall = np.zeros(self.L)
         self.layer_hits = np.zeros(self.L)
         self.layer_needs = np.zeros(self.L)
+        self.waits = []                 # per needed expert that was not resident: arrival - router time
 
     # --- compute with HBM contention -------------------------------------------------------
     def _compute(self, t, work):
@@ -340,6 +344,8 @@ class Timeline:
                 for slot in slots:
                     tr = c.transfer[slot]
                     ready.append(t_r if tr is None else max(t_r, link.finish_time(tr)))
+                    if ready[-1] > t_r:
+                        self.waits.append(ready[-1] - t_r)
                 if cfg.miss_overlap:
                     # run experts in arrival order; stall = time compute sat idle waiting for weights
                     tc, stall = t_r, 0.0
@@ -424,6 +430,20 @@ class Timeline:
                    link_utilization=self.link.busy_time / t_total,
                    mean_lookahead=m["lookahead_sum"] / max(S * self.L, 1) if cfg.prefetch else 0.0,
                    p95_token_latency_ms=1e3 * float(np.percentile(step_times, 95)))
+        # Expert-load latency.  transfer: issue -> arrival of every completed copy (queueing + wire time;
+        # the bare wire time of one expert is t_load_expert).  wait: for every needed expert, how long
+        # after the router decided it the weights were in HBM (0 for a hit); miss_wait: same, misses and
+        # late prefetches only.
+        lat = np.array([x for x, _ in self.link.load_latency]) if self.link.load_latency else np.zeros(1)
+        dem = np.array([x for x, spec in self.link.load_latency if not spec] or [0.0])
+        waits = np.array(self.waits) if self.waits else np.zeros(1)
+        res.update(expert_load_wire_ms=1e3 * cost.t_load_expert,
+                   expert_load_latency_ms=1e3 * float(lat.mean()),
+                   expert_load_latency_p95_ms=1e3 * float(np.percentile(lat, 95)),
+                   demand_load_latency_ms=1e3 * float(dem.mean()),
+                   expert_wait_ms=1e3 * float(waits.sum()) / max(m["needs"], 1),
+                   miss_wait_ms=1e3 * float(waits.mean()),
+                   miss_wait_p95_ms=1e3 * float(np.percentile(waits, 95)))
         res.update(energy_breakdown(cost, S, B, t_total, m["stall"], bytes_moved,
                                     m["exec_experts"], m["exec_tokens"]))
         res["layer_stall_ms"] = (1e3 * self.layer_stall / S).tolist()

@@ -1,6 +1,6 @@
 # CA Project 2: The MoE Memory Wall — Predicting and Prefetching Experts
 
-**Group 25**
+**Group 25** · GitHub: <https://github.com/Alimohammad12314/ca-project>
 
 | Members |
 |---|
@@ -8,12 +8,93 @@
 | Mohammad Ali |
 | Shivansh Bhatnagar |
 
-Course project (Computer Architecture, IIIT Delhi). We study expert-weight movement in Mixture-of-Experts LLM inference **entirely in simulation**, using:
+Course project (Computer Architecture, IIIT Delhi). Mixture-of-Experts (MoE) models are too large for GPU memory, so their
+expert weights live in host DRAM and are copied into GPU HBM when the router picks them. That copy is the bottleneck
+(the "memory wall"). We **predict** which experts the router will pick next, **prefetch** them into HBM ahead of time, and
+choose **which experts stay in HBM**, all training-free.
 
-- **LLMSimulator** (scale-snu), the simulator of the MICRO 2024 *Duplex* paper, with a modified Ramulator 2.0; and
-- **SSD-offloading** (scale-snu), an extension of LLMSimulator that models MoE expert weights offloaded to CPU memory or SSD.
+How we work:
+- **Simulation for all main results**, with
+  - **LLMSimulator** (scale-snu), the simulator of the MICRO 2024 *Duplex* paper; and
+  - **SSD-offloading** (scale-snu), its extension that models expert weights offloaded to host memory.
+- **Real routing traces** from Hugging Face (what the router of Mixtral-8x7B, Llama-4 Maverick and DeepSeek-R1 actually
+  picked, token by token) drive every end-semester experiment, and are also replayed inside LLMSimulator (bonus).
+- An optional **real-GPU validation** on an H100 with the real Mixtral weights: [`endsem/GPU.md`](endsem/GPU.md).
 
-This repository is a fork of SSD-offloading. It adds our experiment scripts, results and simulator patches.
+This repository is a fork of SSD-offloading. It adds our experiment code, results and simulator patches.
+
+## End-semester: prediction, prefetching and HBM management
+
+Everything is in [`endsem/`](endsem/README.md). The design log with every decision and the full results is
+[`endsem/DESIGN.md`](endsem/DESIGN.md).
+
+| Requirement | What we did | Where |
+|---|---|---|
+| Training-free prediction, precision / recall on real traces | temporal votes + cross-layer table + popularity, calibrated and combined; overlap, recall, precision, full coverage | `endsem/predictors/`, `experiments/e2_predictor_accuracy.py` |
+| Prefetching into HBM: trigger, overlap with compute | after each layer's router runs, predict layers l+1 … l+4 and queue copies; demand misses preempt prefetches at 16 MB chunks; experts run as soon as they arrive | `endsem/engine/timeline.py`, `link.py` |
+| Effectiveness: coverage, timely / late, unused, HBM hit rate, extra traffic, exposed stall, expert-load latency, token latency | every simulation reports all of them | columns of every `results/*/*.csv` |
+| HBM policy beyond LRU, compared with LRU | predicted-need eviction: P(used within 4 tokens) from prediction + usage rate; also LFU, Belady | `endsem/engine/hbm.py`, e3, e4 |
+| Baseline / prediction without prefetch / prefetch / complete system | 11-rung ablation ladder + reference rows | `experiments/e3_ablation.py` |
+| Batch, context length, lookahead, aggressiveness | batch 1/4/16, context 256-4096, lookahead cap 1/2/4, coverage target τ | e4, e6 |
+| Energy: fewer stalls vs more traffic | transfer (13.4 pJ/bit), dynamic, background energy per token | e4, e5 |
+| Bonus: real routing inside the LLM simulator | new `routing.model: trace` in LLMSimulator replays the Hugging Face traces; prefetcher evaluated on that traffic | `experiments/bonus_llmsim_replay.py` |
+
+### Results at a glance
+
+All on a simulated A100-80GB, FP16, all routed experts in host DRAM. Numbers are from `endsem/results/`.
+
+**1. The problem.** Fetching an expert costs 2.3x (NVLink-C2C 900 GB/s) to 64x (PCIe 4.0) more than running it, so an
+on-demand system spends 31-68 % (C2C-900) to 93-98 % (PCIe 4.0) of every step waiting on the link (mid-eval Q2).
+
+![load vs execution](docs/figures/fig1_problem_load_vs_exec.png)
+
+**2. Prediction works on real routing.** Real routers repeat themselves (the same experts for neighbouring tokens) and
+layers are linked (experts at layer l hint at layer l+1). Combining the three predictors beats each one on every model.
+
+![predictor accuracy](docs/figures/fig2_predictor_accuracy.png)
+
+**3. Where the design helps, gives little, or hurts.** Blue cells: up to 1.5x with a 25 % cache and up to 5x with the
+cache that really fits (Mixtral batch 16). Red cells: batch 1 with 8-expert models and a small cache, 5-13 % slower than LRU.
+
+![where it helps](docs/figures/fig3_where_it_helps.png)
+
+**4. Why.** Most of the gain comes from deciding what stays in HBM. LRU evicts exactly the expert needed next, because
+each decode step walks through the layers in a fixed cycle. Prefetching adds on top only at batch 16 on a fast link. At batch
+1 on PCIe 4.0 one 8-expert-model expert takes 11-38 ms to copy while a layer computes in under 0.5 ms, so there is no time
+to hide a copy, and wrong guesses (precision ~33 %) block the link a real miss needs.
+
+![component contributions](docs/figures/fig4_component_contributions.png)
+
+**5. Context length matters through HBM capacity.** The KV cache grows with context x batch and pushes experts out of HBM.
+
+![context length](docs/figures/fig5_context_length.png)
+
+**6. Energy.** The GPU's idle power while it waits on the link dominates, so cutting stalls saves far more energy than the
+extra prefetch traffic costs (21 % fewer bytes and 17 % less energy than the best baseline, 55-66 % less than on-demand).
+
+![energy](docs/figures/fig7_energy.png)
+
+**7. Bonus: real routing inside LLMSimulator.** The simulator replays 100 % of the traces' decisions exactly, and our
+timeline matches its per-step latency within 0.13 %. Its default uniform routing hides what the predictor exploits:
+for Llama-4 the design looks 1.3x better than on-demand with uniform routing but is 3.5x better with real routing.
+
+![bonus](docs/figures/fig6_bonus_real_routing_in_llmsim.png)
+
+**Expert-load latency** (batch 16, 25 % cache, ms; `results/e3_ablation/ablation.csv`):
+
+| Model, link | one expert, idle link | demand load, LRU + overlap | demand load, full design | wait per needed expert, LRU + overlap → full design |
+|---|---|---|---|---|
+| Mixtral, C2C-900 | 0.39 | 1.74 | 1.59 | 1.74 → 0.92 |
+| Mixtral, PCIe 4.0 | 11.0 | 49.1 | 47.3 | 49.1 → 36.7 |
+| DeepSeek-R1, C2C-900 | 0.10 | 4.74 | 3.22 | 4.73 → 2.13 |
+| DeepSeek-R1, PCIe 4.0 | 2.75 | 133.4 | 90.7 | 133.1 → 60.0 |
+
+A demand load takes several times the bare copy time because all misses of a layer queue behind each other.
+
+**Limitations.** Grok-1 has no public trace (ours is synthetic, fitted to Mixtral); the DeepSeek-R1 trace is the AWQ
+model with 128 decode tokens; the context sweep reuses the same routing at every context; a single simulated A100.
+
+## Mid-evaluation
 
 | Mid-evaluation item | Where |
 |---|---|
@@ -33,7 +114,13 @@ The overview of all results is in [`results-ca/README.md`](results-ca/README.md)
 ├── external/LLMSimulator/       # submodule: original LLMSimulator (Duplex, Logic-PIM)                  -> Q1
 ├── patch/ssd_offloading.patch   # upstream SSD-offloading patch (applied by setup.sh / patches.sh)
 ├── patches.sh                   # upstream patch script (kept for reference; setup.sh supersedes it)
-└── results-ca/
+├── docs/figures/                # the README figures (built by endsem/experiments/readme_figures.py)
+├── endsem/                      # end-semester: predictor, prefetcher, HBM policy, experiments, results
+│   ├── README.md, DESIGN.md     # how to run / design log and all results
+│   ├── GPU.md                   # real-GPU (H100) validation guide with the real Mixtral weights
+│   ├── traces/ predictors/ engine/ experiments/ tests/
+│   └── results/                 # CSV tables of every experiment (e0-e6, bonus)
+└── results-ca/                  # mid-evaluation
     ├── README.md                # summary of all mid-evaluation results
     ├── q1_.. q4_../             # per question: README (method + results), data/, runs/ (exact configs + raw output)
     ├── scripts/                 # every script used (simulation sweeps, analysis, plots)
@@ -45,7 +132,7 @@ The overview of all results is in [`results-ca/README.md`](results-ca/README.md)
 ## Setup on a new machine
 
 ### Prerequisites
-Tested on Ubuntu 20.04 with g++ 11.4, cmake 3.16, clang 10 and Python 3.8 (numpy 1.24, pandas 2.0, scipy 1.10, matplotlib 3.7, PyYAML 5.3). No GPU is needed.
+Tested on Ubuntu 20.04 with g++ 11.4, cmake 3.16, clang 10, Python 3.8 (mid-evaluation: numpy 1.24, pandas 2.0, scipy 1.10, matplotlib 3.7, PyYAML 5.3) and Python 3.10 (end-semester). No GPU is needed.
 
 ```bash
 sudo apt install build-essential g++-11 cmake clang git python3-pip   # if not already installed
@@ -65,7 +152,7 @@ If you cloned without `--recursive`, `setup.sh` fetches the submodules for you.
 `setup.sh` is safe to re-run. In order, it:
 1. fetches both submodules (and their nested Ramulator 2.0 submodule);
 2. applies the upstream patches: `ramulator2_pim.patch` (both simulators) and `patch/ssd_offloading.patch`;
-3. applies our patches from `results-ca/simulator_patches/` (see its [README](results-ca/simulator_patches/README.md)): PCIe link bandwidth option, A100 support, routing models (incl. the Q4-extended router model) and routing log, MoE-layer counter fix, expert-RNG bias fix, config caching, and the `llama3_70B` / `glam` presets;
+3. applies our patches from `results-ca/simulator_patches/` (see its [README](results-ca/simulator_patches/README.md)): PCIe link bandwidth option, A100 support, routing models (incl. the Q4-extended router model and the end-semester `trace` replay of real routing) and routing log, MoE-layer counter fix, expert-RNG bias fix, config caching, and the `llama3_70B` / `glam` presets;
 4. builds `LLMSimulator/build/run` and `external/LLMSimulator/build/run`.
 
 ### 3. Python packages
@@ -74,7 +161,7 @@ pip install -r results-ca/requirements.txt
 ```
 
 ### 4. Regenerate figures (fast, no simulation)
-Figures are not committed (binary files). Rebuild them from the committed data:
+Figures are not committed (binary files), except the README figures in `docs/figures/`. Rebuild them from the committed data:
 ```bash
 cd results-ca
 python3 scripts/plot_q1.py        # Q1 figures
@@ -93,10 +180,38 @@ python3 scripts/q4x_router_runs.py   # 66 runs,   ~15 min (Q4-extended)
 ```
 Each script writes `data/` and `runs/` in its question folder. To use simulator builds elsewhere, set `LLMSIM_ROOT` (original) or `SSDSIM_ROOT` (SSD-offloading copy) to the simulator directory that contains `build/run`.
 
+### 6. End-semester experiments
+```bash
+cd endsem
+python3.10 -m venv .venv && . .venv/bin/activate        # or: uv venv .venv --python 3.10
+pip install numpy pandas matplotlib scipy pytest pyyaml huggingface_hub
+
+python -m traces.download mixtral                       # open dataset (allenai/analysis_mixtral)
+hf auth login                                           # accept the terms of core12345/MoE_expert_selection_trace first
+python -m traces.download llama4_maverick deepseekR1    # gated dataset
+python -m traces.synthetic grok1                        # no public Grok-1 trace: calibrated to Mixtral
+
+python -m pytest -q tests
+python -m experiments.e0_validation_gate                # must print GATE PASSED (timeline = Q2 on-demand)
+python -m experiments.e1_trace_stats                    # how predictable real routing is
+python -m experiments.e2_predictor_accuracy             # precision / recall / overlap          ~10 min
+python -m experiments.e3_ablation                       # what each component adds              ~40 min on 28 cores
+python -m experiments.e4_sweeps                         # link x cache x batch, lookahead, tau  ~30 min
+python -m experiments.e5_tradeoffs                      # predictor cost, budget vs traffic and energy
+python -m experiments.ctx_base_runs                     # LLMSimulator base pass at context 256-4096 (needs ./setup.sh)
+python -m experiments.e6_context                        # context-length sweep                  ~25 min
+python -m experiments.bonus_llmsim_replay               # real routing inside LLMSimulator      ~15 min
+python -m experiments.report                            # results/headline.csv
+python -m experiments.readme_figures                    # docs/figures/*.png
+```
+Traces (~11 GB with cached prediction streams) go to `endsem/data/`, which is not committed. Every experiment takes
+`--models` to run a subset. Details: [`endsem/README.md`](endsem/README.md).
+
 ## Simulation conventions
 - Simulator CSV output: latency in ns, energy in nJ. Our tables use ms and J.
 - Decode mode: one decode step generates one token per sequence in the batch. FP16 weights.
-- HBM capacity is not enforced by the simulator.
+- HBM capacity is not enforced by LLMSimulator; the end-semester timeline enforces it (cache ratio = share of all routed
+  experts that HBM holds; "physical" = what fits in 80 GB after non-expert weights and the KV cache).
 
 ---
 

@@ -162,7 +162,7 @@ real model's.
 | link bandwidth | pinned → HBM copy of 16 MB, 64 MB and 352 MB buffers, 50 repeats, single stream; also 2 concurrent streams | `link_bw` (replaces 64 GB/s nominal) |
 | per-expert copy time | one 352 MB packed expert, demand path through the scheduler | `t_load_expert` |
 | expert execution | real Mixtral expert, n tokens = 1, 2, 4, 8, 16, 32, 64 (CUDA events, 100 repeats) | `t_exec(n)` (replaces the calibrated roofline) |
-| non-expert time per layer | real attention + norms + router at batch {1,4,16} × ctx {256,512,1024,1536}, experts excluded | `t_nonexpert_layer(batch, ctx)`: **the context-length sweep the engine is missing** |
+| non-expert time per layer | real attention + norms + router at batch {1,4,16} × ctx {256,512,1024,1536}, experts excluded | `t_nonexpert_layer(batch, ctx)`: checks the engine's context sweep (e6), which takes these from LLMSimulator |
 | contention | expert GEMM/GEMV loop alone vs with a concurrent 352 MB copy stream running; slowdown ratio | replaces SSD-offloading's factor HBM/(HBM − link), which predicts only ~1.6% for PCIe5 |
 | idle and busy power | NVML power at idle, during copy only, during compute | energy model check |
 
@@ -263,8 +263,11 @@ Expect Python overhead per small transfer to matter here. Measure it and report 
 
 ## 10. Phase E — compare with the simulation (`compare.py`)
 
-1. Add a measured profile to `engine/costs.py`: `CostModel(..., calibration="gpu/results/calibration_h100.json")`.
-   It overrides `link_bw`, `t_exec`, `t_nonexpert_layer` (now by batch **and ctx**) and `contention_factor`.
+1. The engine already accepts a measured profile: `SimConfig(gpu="H100", link="PCIe5", context=ctx,
+   calibration="gpu/results/calibration_h100.json")` (passed through to `CostModel`). It overrides `link_bw`,
+   `t_exec(n)` (interpolated between measured n), `t_nonexpert_layer` (nearest measured batch, linear in ctx) and
+   `contention_factor`. Keys missing from the JSON keep the LLMSimulator defaults. Without calibration, `context=`
+   uses LLMSimulator's base pass at that context (`results/context_base/`).
 2. For every row of `real_runs.csv`, run the engine on the same workload (same documents, batch, ctx, cache, config)
    twice: default costs (`gpu=H100` or `H100-PCIe`, `link=PCIe5`) and calibrated costs.
 3. Report relative error |sim − real| / real for token latency, stall, hit rate, GB per token and energy.
