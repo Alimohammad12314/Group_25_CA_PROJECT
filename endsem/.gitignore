@@ -1,0 +1,4 @@
+# downloaded traces (gated dataset terms) and cached prediction streams: regenerate with the README
+data/
+results/*.log
+.venv/
