@@ -1,6 +1,6 @@
 # CA Project 2: The MoE Memory Wall — Predicting and Prefetching Experts
 
-**Group 25** · GitHub: <https://github.com/Alimohammad12314/ca-project>
+**Group 25** · GitHub: <https://github.com/Alimohammad12314/Group_25_CA_PROJECT>
 
 | Members |
 |---|
@@ -274,8 +274,8 @@ sudo apt install build-essential g++-11 cmake clang git python3-pip   # if not a
 
 ### 1. Clone (with submodules)
 ```bash
-git clone --recursive https://github.com/Alimohammad12314/ca-project.git
-cd ca-project
+git clone --recursive https://github.com/Alimohammad12314/Group_25_CA_PROJECT.git
+cd Group_25_CA_PROJECT
 ```
 If you cloned without `--recursive`, `setup.sh` fetches the submodules for you.
 

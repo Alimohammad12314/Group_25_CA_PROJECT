@@ -53,7 +53,7 @@ Decisions:
 ## 1. Setup
 
 ```bash
-git clone --recursive https://github.com/Alimohammad12314/ca-project.git && cd ca-project
+git clone --recursive https://github.com/Alimohammad12314/Group_25_CA_PROJECT.git && cd Group_25_CA_PROJECT
 # endsem/ must be in the repository; if it is not pushed yet, copy the folder over (without data/ and .venv/)
 cd endsem
 python -m venv .venv && . .venv/bin/activate
