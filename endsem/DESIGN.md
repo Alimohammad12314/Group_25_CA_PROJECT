@@ -90,6 +90,10 @@ map. Traces and streams are in `endsem/data/` (git-ignored).
   122 and 94 queries x 128 decode tokens; 24 and 57 MoE layers; top-1/128 and top-8/256); Grok-1 synthetic.
 - No leakage: a prediction d layers ahead sees routing up to layer l - d of the current token only.
 - 6 unit tests pass.
+- Real H100 NVL (GPU.md, `gpu/README.md`): real Mixtral-8x7B reproduces the public trace for 98.7 % of
+  (token, layer) pairs; hit rate and GB/token match the engine exactly in all 33 timing-independent runs; with costs
+  measured on the card (`gpu/results/calibration_h100.json`) token latency is within 3.1 % median (12.8 % worst) over
+  77 runs, 16.6 % optimistic with the default LLMSimulator costs.
 
 ## 7. Results (A100, all numbers from `results/`)
 
@@ -179,12 +183,31 @@ traces (`routing.model: trace`, any top-k) for 128 decode steps, batch 1/4/16, A
 (choosing what stays in HBM), not through prefetching, as the mid-eval bound predicted. Prefetching helps only
 at larger batch on fast links. The gap to the oracle (1.41x) is prediction accuracy and eviction foresight.
 
+### Hidden-state predictor (H100, `experiments/e7_hidden_state.py`)
+
+The public traces hold expert IDs only; the best ID-only lookup table fitted to the test data reaches 46 % next-layer
+overlap for Mixtral. On the H100 the runtime applies layer l+d's router to the (normalised) hidden state at layer l
+(training-free; idea from Fate / Pre-gated MoE) on the same tokens:
+
+| Overlap, context 1024 | d = 1, b = 1 | d = 4, b = 1 | d = 1, b = 4 | d = 1, b = 16 |
+|---|---|---|---|---|
+| ID-only (ours) | 42.0 % | 40.8 % | 74.6 % | 99.2 % |
+| hidden-state | 86.2 % | 72.9 % | 90.9 % | 99.8 % |
+
+Its natural budget ceil(sum P) under-fetches at batch 4 (recall 70.9 %, full coverage 7.4 %). Sizing it with our
+adaptive budget (`hybrid_stream`) gives recall 96.2 % / full coverage 82.5 % (precision 95.8 → 78.0 %); at batch 1
+recall 86.2 → 90.1 %. Speed with H100 costs barely moves: full design 1.36x (ID-only) → 1.40x (hidden-state or
+hybrid) over on-demand at batch 1, against 1.58x for LRU + miss overlap and 1.72x for the oracle; at batch 4/16 all
+predictors are within 1 % of the oracle (1.30-1.33x). So once eviction is right, prediction accuracy is not what
+limits a PCIe-attached GPU: the copy itself is (`results/e7_hybrid_{default,calibrated}`).
+
 ## 8. Limitations and next steps
 
 Grok-1 is synthetic; the DeepSeek-R1 trace is the AWQ model with 128 decode tokens; decode only (prefill only
 warms predictors); full N x N cross-layer tables (keep top-8 candidates per row, ~0.9 MB for DeepSeek-R1);
 H = 4 and the early-layer bonus tuned on these traces (validate on held-out benchmarks); batch-1 8-expert
 small-cache regime loses to LRU by up to 13 % (set dueling between LRU and the rate score, as in DIP);
-no hidden-state predictors; A100 single GPU only (`--gpu H100` supported, not swept). The context sweep keeps the
+A100 single GPU for the main results (validated on one H100 NVL, see sections 6 and 7). The context sweep keeps the
 same routing at every context (the traces are too short to replay 4096-token positions), so it captures attention time
-and HBM capacity, not position-dependent routing. Real-GPU validation of the cost model is planned in GPU.md.
+and HBM capacity, not position-dependent routing. Real hardware adds clock-down after link waits and an 8 % copy-compute slowdown that the cost model does not include
+(`gpu/README.md`).

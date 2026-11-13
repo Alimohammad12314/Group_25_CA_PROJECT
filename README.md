@@ -27,7 +27,7 @@ This repository is a fork of SSD-offloading. It adds our experiment code, result
 
 1. [End-semester: prediction, prefetching and HBM management](#end-semester-prediction-prefetching-and-hbm-management)
    - [Results at a glance](#results-at-a-glance): problem, prediction accuracy, where it helps, component contributions,
-     context length, energy, bonus, expert-load latency, limitations
+     context length, energy, bonus, real-H100 validation, expert-load latency, limitations
 2. [References: where each strategy comes from](#references-where-each-strategy-comes-from)
    - [What we took from each paper](#what-we-took-from-each-paper)
    - [Strategies used in the design (by component)](#strategies-used-in-the-design-by-component)
@@ -124,6 +124,31 @@ for Llama-4 the design looks 1.3x better than on-demand with uniform routing but
 
 ![bonus](docs/figures/fig6_bonus_real_routing_in_llmsim.png)
 
+**8. Validation on a real H100 (real Mixtral-8x7B, experts in host memory).** Full report:
+[`endsem/gpu/README.md`](endsem/gpu/README.md).
+
+- The public trace is real routing: the real model reproduces it for 98.7 % of (token, layer) pairs.
+- The simulator's cache logic is exact (same hit rate and GB per token in all 33 timing-independent runs). With costs
+  measured on the H100 (`calibration_h100.json`, PCIe 5.0 at 56 GB/s) its latency is within 3.1 % median over 77 runs.
+- **A hidden-state predictor reaches the accuracy ID-only prediction cannot.** Applying layer l+d's own router to the
+  hidden state at layer l (training-free, Fate / Pre-gated MoE idea) names the next layer's experts far better than
+  any ID-only method (the best ID-only lookup table reaches 46 %):
+
+| Next-layer overlap (context 1024) | batch 1 | batch 4 | batch 16 |
+|---|---|---|---|
+| ID-only predictor (ours, same tokens) | 42 % | 75 % | 99 % |
+| Hidden-state predictor, 1 layer ahead | **86 %** | **91 %** | **99.8 %** |
+| Hidden-state predictor, 4 layers ahead | 73 % | 86 % | 99 % |
+
+- With its own budget (expected number of needed experts) the hidden-state predictor under-fetches at batch 4
+  (recall 71 %, full coverage 7 %). Sizing it with **our adaptive budget** raises recall to 96 % and full coverage to
+  83 % (batch 1: 86 → 90 %; `endsem/results/e7_hybrid_calibrated/accuracy.csv`).
+- **Better accuracy buys little speed here.** Full design over on-demand at batch 1 (H100 costs): 1.36x with ID-only,
+  1.40x with hidden-state, while LRU + miss overlap gives 1.58x and the oracle 1.72x. At batch 4-16 our design is
+  already within 1 % of the oracle. On PCIe one expert copy takes far longer than a layer's compute, so even a perfect
+  guess cannot be hidden; the value gate correctly blocks most prefetches. Live on the GPU the predictor itself costs
+  11-15 ms per token in our Python runtime (1.28x vs 1.32x without it).
+
 **Expert-load latency** (batch 16, 25 % cache, ms; `results/e3_ablation/ablation.csv`):
 
 | Model, link | one expert, idle link | demand load, LRU + overlap | demand load, full design | wait per needed expert, LRU + overlap → full design |
@@ -136,7 +161,7 @@ for Llama-4 the design looks 1.3x better than on-demand with uniform routing but
 A demand load takes several times the bare copy time because all misses of a layer queue behind each other.
 
 **Limitations.** Grok-1 has no public trace (ours is synthetic, fitted to Mixtral); the DeepSeek-R1 trace is the AWQ
-model with 128 decode tokens; the context sweep reuses the same routing at every context; a single simulated A100.
+model with 128 decode tokens; the context sweep reuses the same routing at every context; main results use a simulated A100 (validated on one real H100 NVL, section 8).
 
 ## References: where each strategy comes from
 

@@ -11,7 +11,8 @@ model actually chose:
 
 This script turns q into an engine prediction stream (batch union P = 1 - prod_b (1 - q_b), budget M = expected
 number of needed experts), scores it exactly like e2 (overlap, recall, precision, full coverage per distance) next
-to the ID-only stream on the same workload, and runs the timeline policies with both.
+to the ID-only stream on the same workload, and runs the timeline policies with both. A third stream keeps the
+hidden-state scores but sizes each prefetch with our adaptive budget (hybrid_stream).
 
     python -m experiments.e7_hidden_state [--glob 'gpu/results/hs_pred_*.npz'] [--gpu H100] [--calibration ...]
 """
@@ -23,6 +24,7 @@ import numpy as np
 import pandas as pd
 
 from engine.timeline import SimConfig, simulate
+from predictors.budget import AdaptiveBudget
 from predictors.stream import Stream, build_stream, summarize
 from traces.workload import Workload
 
@@ -36,14 +38,16 @@ POLICIES = [
     ("full design", "pred", 0.25, FULL_SIM),
     ("oracle", "oracle", 0.25, FULL_SIM),
 ]
+HS_NAMES = ("hidden-state (H100)", "hidden-state + our budget")
 
 
 def workload_from(A, tokens_per_request, model="mixtral", num_experts=8):
     S, B, L, k = A.shape
     gs = np.zeros(S, bool)
     gs[::tokens_per_request] = True
+    G = -(-S // tokens_per_request)                                     # one empty warm-up row per request group
     return Workload(model=model, source="live:H100", num_experts=num_experts, top_k=k, A=A.astype(np.int16),
-                    group_start=gs, warm=np.full((1, B, 1, L, k), -1, np.int16), tokens_per_request=tokens_per_request)
+                    group_start=gs, warm=np.full((G, B, 1, L, k), -1, np.int16), tokens_per_request=tokens_per_request)
 
 
 def stream_from_q(q, k, name="hidden_state"):
@@ -54,6 +58,29 @@ def stream_from_q(q, k, name="hidden_state"):
     M = np.clip(np.ceil(P.sum(-1)), k, N).astype(np.int16)
     cfg = PRED["full"].__class__(name=name, D=P.shape[2] - 1)
     return Stream(cfg, P.astype(np.float16), M, pd.DataFrame(), pd.DataFrame(), 0.0, {}, None)
+
+
+def hybrid_stream(hs, wl, name="hidden-state + our budget"):
+    """Hidden-state scores with our adaptive budget (APEX top-(k+delta), STEP off-switch) instead of ceil(sum P).
+
+    The budget is learned online exactly as in predictors/stream.py: the prediction for (s, l, d) is sized from
+    the deltas seen so far, and once layer l is routed at step s every distance's delta* is recorded."""
+    S, L, D1, N = hs.P.shape
+    budget = AdaptiveBudget(L, D1 - 1, N)
+    needed = wl.needed()
+    M = np.empty((S, L, D1), np.int16)
+    for s in range(S):
+        for l in range(L):
+            U = np.asarray(needed[s][l][0])
+            for d in range(D1):
+                sc = hs.P[s, l, d].astype(np.float32)
+                m, k_hat = budget.size(l, d, float(sc.sum()))
+                M[s, l, d] = max(m, wl.top_k)
+                pos = np.empty(N, np.int64)
+                pos[np.argsort(-sc, kind="stable")] = np.arange(N)
+                budget.update(l, d, pos[U], k_hat)
+    cfg = PRED["full"].__class__(name=name, D=D1 - 1)
+    return Stream(cfg, hs.P, M, pd.DataFrame(), pd.DataFrame(), 0.0, {}, None)
 
 
 def score(stream, wl):
@@ -91,11 +118,12 @@ def main(argv=None):
     ap.add_argument("--glob", default=os.path.join(ROOT, "gpu", "results", "hs_pred_*.npz"))
     ap.add_argument("--gpu", default="H100")
     ap.add_argument("--calibration", default="")
+    ap.add_argument("--out", default="e7_hidden_state", help="results/<out>/")
     args = ap.parse_args(argv)
     files = sorted(glob.glob(args.glob))
     if not files:
         raise SystemExit(f"no hidden-state prediction files match {args.glob} (run GPU.md Phase B'' first)")
-    out = out_dir("e7_hidden_state")
+    out = out_dir(args.out)
     acc_rows, sim_rows = [], []
     for f in files:
         z = np.load(f)
@@ -105,10 +133,11 @@ def main(argv=None):
         wl = workload_from(A, tpr)
         B = wl.B
         hs = stream_from_q(q, wl.top_k)
-        streams = {"hidden-state (H100)": hs, "ID-only (ours)": build_stream(wl, PRED["full"])}
+        streams = {"hidden-state (H100)": hs, "hidden-state + our budget": hybrid_stream(hs, wl),
+                   "ID-only (ours)": build_stream(wl, PRED["full"])}
         streams["oracle"] = build_stream(wl, PRED["oracle"])
-        for name in ("hidden-state (H100)", "ID-only (ours)"):
-            t = score(streams[name], wl) if name.startswith("hidden") else \
+        for name in HS_NAMES + ("ID-only (ours)",):
+            t = score(streams[name], wl) if name in HS_NAMES else \
                 pd.DataFrame([dict(distance=d, **summarize(streams[name].metrics, d)) for d in range(5)])
             t.insert(0, "predictor", name)
             t.insert(0, "batch", B)
@@ -117,7 +146,7 @@ def main(argv=None):
         needed = wl.needed()
         for link in LINKS:
             for pol, pred, ratio, kw in POLICIES:
-                for sname in (["hidden-state (H100)", "ID-only (ours)"] if pred == "pred" else [None]):
+                for sname in (list(HS_NAMES) + ["ID-only (ours)"] if pred == "pred" else [None]):
                     st = streams["oracle"] if pred == "oracle" else (streams[sname] if sname else None)
                     cfg = SimConfig(gpu=args.gpu, link=link, cache_ratio=ratio, context=ctx,
                                     calibration=args.calibration, **kw)
