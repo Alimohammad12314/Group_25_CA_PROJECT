@@ -1,0 +1,62 @@
+{
+ "model_dir": "Mixtral-8x7B-v0.1",
+ "docs": 32,
+ "token_agreement": 0.97607421875,
+ "token_agreement_first8": 0.981689453125,
+ "routing_agreement": 0.9869341850280762,
+ "routing_agreement_per_layer": [
+  0.9966,
+  0.9939,
+  0.994,
+  0.9926,
+  0.9942,
+  0.9934,
+  0.9904,
+  0.9885,
+  0.9867,
+  0.9865,
+  0.9883,
+  0.9894,
+  0.9856,
+  0.9871,
+  0.9869,
+  0.9866,
+  0.9869,
+  0.9876,
+  0.9878,
+  0.9868,
+  0.983,
+  0.9811,
+  0.9798,
+  0.9799,
+  0.9786,
+  0.9791,
+  0.9801,
+  0.9807,
+  0.9836,
+  0.9869,
+  0.9898,
+  0.9897
+ ],
+ "routing_agreement_first_64": 0.98736572265625,
+ "prefill_seconds": 15.215407848358154,
+ "decode_routing_agreement": 0.9892578125,
+ "decode_token_agreement": 0.984375,
+ "invariance_vs_C1@0.25": {
+  "C1@0.5": {
+   "routing_identical": true,
+   "tokens_identical": true,
+   "router_logits_max_abs_diff": 0.0
+  },
+  "C4@0.25": {
+   "routing_identical": true,
+   "tokens_identical": true,
+   "router_logits_max_abs_diff": 0.0
+  },
+  "C1b@0.25": {
+   "routing_identical": true,
+   "tokens_identical": true,
+   "router_logits_max_abs_diff": 0.0
+  }
+ }
+}

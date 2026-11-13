@@ -1,0 +1,161 @@
+{
+ "gpu": "H100-NVL",
+ "gpu_name": "NVIDIA H100 NVL",
+ "model": "mixtral",
+ "link": "PCIe5",
+ "env": {
+  "gpu": "index, name, memory.total [MiB], power.limit [W], clocks.max.sm [MHz], pci.bus_id, pcie.link.gen.max, pcie.link.gen.current, pcie.link.width.max, pcie.link.width.current\n0, NVIDIA H100 NVL, 95830 MiB, 400.00 W, 1785 MHz, 00000000:21:00.0, 5, 5, 16, 16\n1, NVIDIA H100 NVL, 95830 MiB, 400.00 W, 1785 MHz, 00000000:C1:00.0, 5, 5, 16, 16",
+  "driver": "575.57.08",
+  "topo": "\u001b[4mGPU0\tGPU1\tCPU Affinity\tNUMA Affinity\tGPU NUMA ID\u001b[0m\nGPU0\t X \tSYS\t0-31\t0\t\tN/A\nGPU1\tSYS\t X \t32-63\t1\t\tN/A\n\nLegend:\n\n  X    = Self\n  SYS  = Connection traversing PCIe as well as the SMP interconnect between NUMA nodes (e.g., QPI/UPI)\n  NODE = Connection traversing PCIe as well as the interconnect between PCIe Host Bridges within a NUMA node\n  PHB  = Connection traversing PCIe as well as a PCIe Host Bridge (typically the CPU)\n  PXB  = Connection traversing multiple PCIe bridges (without traversing the PCIe Host Bridge)\n  PIX  = Connection traversing at most a single PCIe bridge\n  NV#  = Connection traversing a bonded set of # NVLinks",
+  "cpu": "Model name:                              AMD EPYC 9354 32-Core Processor\nCore(s) per socket:                      32\nSocket(s):                               2\nNUMA node(s):                            2\nNUMA node0 CPU(s):                       0-31\nNUMA node1 CPU(s):                       32-63",
+  "mem": "total        used        free      shared  buff/cache   available\nMem:             503         155          93         128         387         347\nSwap:              7           2           5",
+  "memlock_soft_hard": [
+   8388608,
+   8388608
+  ],
+  "disk": "Filesystem                         Size  Used Avail Use% Mounted on\n/dev/mapper/ubuntu--vg-ubuntu--lv   21T   13T  7.6T  62% /",
+  "python": "3.10.2",
+  "torch": "2.5.1+cu121",
+  "torch_cuda": "12.1",
+  "cuda_device": "NVIDIA H100 NVL",
+  "cuda_visible": "0",
+  "numactl": "policy: bind\npreferred node: 0\nphyscpubind: 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 \ncpubind: 0 \nnodebind: 0 \nmembind: 0 \npreferred: 0",
+  "clocks_locked": false,
+  "rapl_readable": false,
+  "transformers": "4.57.6",
+  "has_numactl": true
+ },
+ "link_bench": {
+  "single_16MB_GBps": 57.210949043951146,
+  "single_64MB_GBps": 57.595428232527226,
+  "single_352MB_GBps": 57.6934310098756,
+  "two_streams_352MB_GBps": 57.66756513087061
+ },
+ "scheduler_bench": {
+  "chunk16_depth2": {
+   "latency_ms": 6.32207989692688,
+   "throughput_GBps": 56.21778815198246,
+   "busy_GBps": 56.734449417533824,
+   "host_wall_GBps": 56.21186622440272,
+   "chunks": 552
+  },
+  "chunk16_depth4": {
+   "latency_ms": 6.32097601890564,
+   "throughput_GBps": 56.49465426553374,
+   "busy_GBps": 56.910134547449125,
+   "host_wall_GBps": 56.48401313127452,
+   "chunks": 552
+  },
+  "chunk32_depth2": {
+   "latency_ms": 6.264159917831421,
+   "throughput_GBps": 56.75007981711312,
+   "busy_GBps": 57.103614354675585,
+   "host_wall_GBps": 56.739112938586636,
+   "chunks": 288
+  },
+  "chunk32_depth4": {
+   "latency_ms": 6.259760141372681,
+   "throughput_GBps": 57.03391736032875,
+   "busy_GBps": 57.28631568422075,
+   "host_wall_GBps": 57.023591405406265,
+   "chunks": 288
+  },
+  "chunk64_depth2": {
+   "latency_ms": 6.219967842102051,
+   "throughput_GBps": 57.32024081875096,
+   "busy_GBps": 57.485981209496664,
+   "host_wall_GBps": 57.30960128251535,
+   "chunks": 144
+  },
+  "chunk64_depth4": {
+   "latency_ms": 6.228287935256958,
+   "throughput_GBps": 57.31853922981176,
+   "busy_GBps": 57.484792911251084,
+   "host_wall_GBps": 57.307768009335064,
+   "chunks": 144
+  },
+  "python_issue_us_per_chunk": 23.792048450559378
+ },
+ "link_GBps": 56.21778815198246,
+ "t_load_expert_s": 0.00632207989692688,
+ "t_exec_s": {
+  "1": 0.00013568127632141114,
+  "2": 0.00013369983673095702,
+  "4": 0.00013669183731079102,
+  "8": 0.00013508543968200685,
+  "16": 0.00013804287910461428,
+  "32": 0.00013859392166137694,
+  "64": 0.00014016448020935058
+ },
+ "t_exec_hostpaced_s": {
+  "1": 0.00016468868590891362,
+  "2": 0.00016262865625321865,
+  "4": 0.00016563630662858487,
+  "8": 0.00016393465921282768,
+  "16": 0.00016729751601815223,
+  "32": 0.0001684179250150919,
+  "64": 0.0001705243531614542
+ },
+ "t_exec_after_idle_s": {
+  "1": 0.00019767999649047851,
+  "2": 0.0001940319985151291,
+  "4": 0.00019864000380039217,
+  "8": 0.00019582399725914,
+  "16": 0.00019894400238990785,
+  "32": 0.00019995199888944628,
+  "64": 0.00020265600085258485
+ },
+ "t_nonexpert_layer_s": {
+  "b1_ctx256": 0.0004546124935150146,
+  "b1_ctx512": 0.0004534209966659546,
+  "b1_ctx1024": 0.0004519760012626648,
+  "b1_ctx1536": 0.0004545285105705261,
+  "b4_ctx256": 0.0004771844893693924,
+  "b4_ctx512": 0.00047708849608898166,
+  "b4_ctx1024": 0.00047715699672698975,
+  "b4_ctx1536": 0.0004770300090312958,
+  "b16_ctx256": 0.0005108304917812348,
+  "b16_ctx512": 0.0005105669796466828,
+  "b16_ctx1024": 0.0005561884939670563,
+  "b16_ctx1536": 0.000633336991071701
+ },
+ "t_nonexpert_layer_after_idle_s": {
+  "b1_ctx256": 0.0005579442977905278,
+  "b1_ctx512": 0.0005551772117614751,
+  "b1_ctx1024": 0.0005574607849121093,
+  "b1_ctx1536": 0.0005573630332946777,
+  "b4_ctx256": 0.0005812792778015141,
+  "b4_ctx512": 0.0005810194015502933,
+  "b4_ctx1024": 0.0005804629325866697,
+  "b4_ctx1536": 0.0005821070671081542,
+  "b16_ctx256": 0.0006204857826232904,
+  "b16_ctx512": 0.0006178183555603026,
+  "b16_ctx1024": 0.0006383957862854004,
+  "b16_ctx1536": 0.0007148246765136725
+ },
+ "contention_bench": {
+  "1": {
+   "alone_us": 133.90858968098956,
+   "with_copy_us": 144.6459706624349,
+   "factor": 1.0801844079384675
+  },
+  "16": {
+   "alone_us": 135.02452850341797,
+   "with_copy_us": 145.1618194580078,
+   "factor": 1.075077403098158
+  },
+  "64": {
+   "alone_us": 140.0104522705078,
+   "with_copy_us": 153.37599436442056,
+   "factor": 1.0954610307814006
+  }
+ },
+ "contention_factor": 1.0801844079384675,
+ "power_W": {
+  "idle": 90.63218573137073,
+  "copy": 99.29700976415651,
+  "compute": 393.9864178484515,
+  "copy_and_compute": 288.4523555910594,
+  "idle_after": 92.94447555400808
+ }
+}

@@ -1,0 +1,75 @@
+overlap by distance (share of the batch's experts named in advance)
+distance                               0      1      2      3      4
+batch context predictor                                             
+1     256     ID-only (ours)       0.343  0.419  0.409  0.409  0.406
+              hidden-state (H100)  0.353  0.874  0.825  0.786  0.751
+      1024    ID-only (ours)       0.372  0.420  0.419  0.418  0.408
+              hidden-state (H100)  0.381  0.862  0.809  0.763  0.729
+      1536    ID-only (ours)       0.352  0.438  0.432  0.432  0.422
+              hidden-state (H100)  0.361  0.875  0.828  0.785  0.756
+4     256     ID-only (ours)       0.717  0.739  0.736  0.736  0.736
+              hidden-state (H100)  0.718  0.910  0.892  0.876  0.860
+      1024    ID-only (ours)       0.724  0.746  0.746  0.745  0.740
+              hidden-state (H100)  0.725  0.909  0.889  0.873  0.855
+      1536    ID-only (ours)       0.717  0.743  0.740  0.739  0.738
+              hidden-state (H100)  0.721  0.910  0.891  0.872  0.857
+16    256     ID-only (ours)       0.991  0.992  0.992  0.992  0.992
+              hidden-state (H100)  0.991  0.998  0.997  0.996  0.995
+      1024    ID-only (ours)       0.992  0.992  0.992  0.992  0.992
+              hidden-state (H100)  0.991  0.998  0.997  0.995  0.994
+      1536    ID-only (ours)       0.991  0.992  0.992  0.992  0.992
+              hidden-state (H100)  0.990  0.998  0.998  0.996  0.994
+
+precision / recall with the budget, distance 1
+ batch  context           predictor  recall  precision  budget  union
+    16     1024 hidden-state (H100)   0.971      0.993   7.725  7.908
+    16     1024      ID-only (ours)   1.000      0.988   8.000  7.908
+    16     1536 hidden-state (H100)   0.969      0.994   7.704  7.900
+    16     1536      ID-only (ours)   1.000      0.987   8.000  7.900
+    16      256 hidden-state (H100)   0.967      0.994   7.689  7.906
+    16      256      ID-only (ours)   1.000      0.988   8.000  7.906
+     1     1024 hidden-state (H100)   0.862      0.862   2.000  2.000
+     1     1024      ID-only (ours)   0.672      0.325   4.366  2.000
+     1     1536 hidden-state (H100)   0.875      0.875   2.000  2.000
+     1     1536      ID-only (ours)   0.712      0.326   4.639  2.000
+     1      256 hidden-state (H100)   0.874      0.874   2.000  2.000
+     1      256      ID-only (ours)   0.654      0.326   4.248  2.000
+     4     1024 hidden-state (H100)   0.709      0.958   3.976  5.487
+     4     1024      ID-only (ours)   0.986      0.689   7.857  5.487
+     4     1536 hidden-state (H100)   0.711      0.958   3.977  5.478
+     4     1536      ID-only (ours)   0.987      0.687   7.872  5.478
+     4      256 hidden-state (H100)   0.715      0.960   3.974  5.453
+     4      256      ID-only (ours)   0.987      0.683   7.875  5.453
+
+speedup over on-demand (25 % cache)
+policy                 LRU + overlap  ...  predict-evict only [hidden-state (H100)]
+batch context link                    ...                                          
+1     256     C2C-900           1.52  ...                                      1.36
+              PCIe4             1.52  ...                                      1.36
+              PCIe5             1.52  ...                                      1.36
+      1024    C2C-900           1.58  ...                                      1.39
+              PCIe4             1.58  ...                                      1.39
+              PCIe5             1.58  ...                                      1.39
+      1536    C2C-900           1.54  ...                                      1.36
+              PCIe4             1.54  ...                                      1.36
+              PCIe5             1.54  ...                                      1.36
+4     256     C2C-900           1.02  ...                                      1.31
+              PCIe4             1.02  ...                                      1.31
+              PCIe5             1.02  ...                                      1.31
+      1024    C2C-900           1.02  ...                                      1.32
+              PCIe4             1.02  ...                                      1.32
+              PCIe5             1.02  ...                                      1.32
+      1536    C2C-900           1.02  ...                                      1.31
+              PCIe4             1.02  ...                                      1.31
+              PCIe5             1.02  ...                                      1.31
+16    256     C2C-900           1.02  ...                                      1.30
+              PCIe4             1.02  ...                                      1.30
+              PCIe5             1.02  ...                                      1.30
+      1024    C2C-900           1.02  ...                                      1.29
+              PCIe4             1.02  ...                                      1.29
+              PCIe5             1.02  ...                                      1.29
+      1536    C2C-900           1.02  ...                                      1.29
+              PCIe4             1.02  ...                                      1.29
+              PCIe5             1.02  ...                                      1.29
+
+[27 rows x 7 columns]
