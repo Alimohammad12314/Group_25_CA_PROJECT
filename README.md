@@ -44,6 +44,8 @@ This repository is a fork of SSD-offloading. It adds our experiment code, result
 6. [Simulation conventions](#simulation-conventions)
 7. [Upstream: SSD-offloading](#upstream-ssd-offloading)
 
+**Interactive dashboard:** <https://alimohammad12314.github.io/Group_25_CA_PROJECT/> (source in [`dashboard/`](dashboard/README.md)): architecture walkthrough and every result, with controls for model, batch, link and cache.
+
 Other documents: [`endsem/README.md`](endsem/README.md) (end-semester code and how to run it) ·
 [`endsem/DESIGN.md`](endsem/DESIGN.md) (design log and full results) · [`endsem/GPU.md`](endsem/GPU.md) (H100 validation) ·
 [`results-ca/README.md`](results-ca/README.md) (mid-evaluation summary)
