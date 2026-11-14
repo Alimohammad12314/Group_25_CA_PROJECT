@@ -135,6 +135,7 @@
       <div class="card tile"><span class="tile-l">Prediction accuracy (overlap)</span><div class="tile-v" id="t-acc">…</div><div class="tile-s" id="t-acc-s"></div></div>
       <div class="card tile"><span class="tile-l">Speedup vs on-demand</span><div class="tile-v" id="t-speed">…</div><div class="tile-s" id="t-speed-s"></div></div>
       <div class="card tile"><span class="tile-l">vs LRU baseline</span><div class="tile-v" id="t-lru">…</div><div class="tile-s" id="t-lru-s"></div></div>
+      <div class="card tile"><span class="tile-l">Share of ideal speed</span><div class="tile-v" id="t-ideal">…</div><div class="tile-s" id="t-ideal-s"></div></div>
       <div class="card tile"><span class="tile-l">Cache hit rate</span><div class="tile-v" id="t-hit">…</div><div class="tile-s" id="t-hit-s"></div></div>
       <div class="card tile"><span class="tile-l">Energy per token</span><div class="tile-v" id="t-energy">…</div><div class="tile-s" id="t-energy-s"></div></div>
     </div>
@@ -145,7 +146,7 @@
       <h2>3 · What each part adds</h2>
       <p class="muted">Speedup as we switch parts on. Dashed line = LRU baseline.</p>
     </div></div>
-    <div class="card"><div class="bars" id="ladder-chart"></div></div>
+    <div class="card"><div class="bars" id="ladder-chart"></div><p class="muted ideal-note" id="ladder-ideal"></p></div>
   </section>
 
   <section class="sec" id="where">

@@ -184,3 +184,4 @@ footer { font-size: .8rem; color: var(--muted); border-top: 1px solid var(--line
 .badge { font-size: .78rem; padding: 3px 9px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .table caption { text-align: left; padding-bottom: 6px; font-size: .8rem; }
 .insight { font-size: 1rem; font-weight: 500; border-left: 3px solid var(--c1); padding: 4px 0 4px 14px; max-width: 80ch; }
+.ideal-note { margin-top: 14px; padding-top: 10px; border-top: 1px dashed var(--line); max-width: none; }

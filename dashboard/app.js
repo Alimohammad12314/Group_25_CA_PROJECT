@@ -107,6 +107,11 @@
     put('tk-acc', v(ours, 'overlap', fpct));
     put('t-acc', v(ours, 'overlap', fpct));
     put('t-acc-s', hs ? 'Hidden state on H100: ' + v(hs, 'overlap', fpct) : 'Repeat last token: ' + v(simple, 'overlap', fpct));
+    const od = byRung(rows, OD);
+    const ideal = od ? num(od.token_latency_ms) * (1 - num(od.stall_fraction)) : NaN;   // no copying at all: compute only
+    put('t-ideal', f && isFinite(ideal) ? fpct(ideal / num(f.token_latency_ms)) : '–');
+    put('t-ideal-s', or && isFinite(ideal) ? 'Perfect prediction: ' + fpct(ideal / num(or.token_latency_ms)) + ' · ideal = all experts in GPU' : '');
+    put('ladder-ideal', od && isFinite(ideal) ? `Ideal, if every expert fitted in GPU memory: ${fx(num(od.token_latency_ms) / ideal)} (${fms(ideal)} per token). Not possible on one GPU, shown as the ceiling.` : '');
     put('tk-config', cfgText());
     put('tk-speed', v(f, 'speedup', fx));
     put('tk-lru', v(f, 'vs_lru_overlap', fx), gc);
