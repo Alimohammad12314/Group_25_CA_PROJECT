@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Build the course submission ZIP: GroupNo_25_ProjectNo_2.zip
 #
-#   ./make_submission.sh                 # writes ../GroupNo_25_ProjectNo_2.zip
+#   ./make_submission.sh                 # writes ./GroupNo_25_ProjectNo_2.zip (repository root)
 #
 # Put the report and slides in report/ first (any file there is included, tracked or not),
 # e.g. report/Group25_Report.pdf and report/Group25_Slides.pptx.
@@ -15,7 +15,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")" && pwd)
 NAME=GroupNo_25_ProjectNo_2
-OUT=${1:-"$ROOT/../$NAME.zip"}
+OUT=${1:-"$ROOT/$NAME.zip"}
 KEEP_RUN="results-ca/q2_offload_load_vs_exec/runs/A100_mixtral_b1_base/"
 KEEP_NPZ="endsem/gpu/results/hs_pred_b1_ctx1024.npz"
 
@@ -26,7 +26,7 @@ mkdir -p "$STAGE/$NAME"
 
 {
   git ls-files | grep -v -E '^results-ca/[^/]+/runs/' | grep -v -E '^endsem/gpu/results/hs_pred_.*\.npz$' \
-    | grep -v -x -E 'LLMSimulator|external/LLMSimulator'
+    | grep -v -x -E 'LLMSimulator|external/LLMSimulator' | grep -v -E '\.zip$'
   git ls-files "$KEEP_RUN"
   echo "$KEEP_NPZ"
   ls endsem/results/*_run.log 2>/dev/null || true          # representative end-semester run logs (untracked, small)

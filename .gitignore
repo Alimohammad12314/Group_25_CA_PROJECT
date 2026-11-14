@@ -46,3 +46,4 @@ results-ca/q4_extended_router_logic/runs/deepseekR1_*/routing_log.csv
 # ---- README figures are the one exception to the image rule ----
 !docs/figures/*.png
 !endsem/architecture_v3.png
+!GroupNo_25_ProjectNo_2.zip
