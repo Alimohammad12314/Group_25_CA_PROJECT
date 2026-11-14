@@ -102,11 +102,16 @@
     const v = (r, k, fmt) => (r ? fmt(num(r[k])) : '–');
     const put = (id, text, cls) => { const e = $(id); if (e) { e.textContent = text; if (cls !== undefined) e.className = cls; } };
     const g = f ? num(f.vs_lru_overlap) : NaN, gc = g >= 1.005 ? 'good' : (g < 0.995 ? 'bad' : '');
+    const accRow = (pred, traces) => D.accuracy.find((z) => z.model === S.model && z.batch === S.batch && z.predictor === pred && z.traces === traces && z.distance === 1);
+    const ours = accRow('ours (full, adaptive budget)', 'public'), simple = accRow('previous token', 'public'), hs = accRow('hidden-state (H100)', 'h100');
+    put('tk-acc', v(ours, 'overlap', fpct));
+    put('t-acc', v(ours, 'overlap', fpct));
+    put('t-acc-s', hs ? 'Hidden state on H100: ' + v(hs, 'overlap', fpct) : 'Repeat last token: ' + v(simple, 'overlap', fpct));
     put('tk-config', cfgText());
     put('tk-speed', v(f, 'speedup', fx));
     put('tk-lru', v(f, 'vs_lru_overlap', fx), gc);
     put('t-speed', v(f, 'speedup', fx));
-    put('t-speed-s', 'Perfect prediction: ' + v(or, 'speedup', fx));
+    put('t-speed-s', 'With perfect prediction: ' + v(or, 'speedup', fx));
     put('t-lru', v(f, 'vs_lru_overlap', fx), 'tile-v ' + gc);
     put('t-lru-s', g >= 1.005 ? 'faster than LRU' : (g < 0.995 ? 'slower than LRU' : 'same as LRU'));
     put('t-hit', v(f, 'hit_rate', fpct));
@@ -117,7 +122,7 @@
 
   // ---- ladder ----------------------------------------------------------------------------------
   const SHORT = {
-    '1 on-demand, no cache': 'No cache', '2 + HBM cache (LRU)': '+ GPU cache (LRU)', '3 + temporal predictor': '+ predictor: recent tokens',
+    '1 on-demand, no cache': 'On demand (no cache)', '2 + HBM cache (LRU)': '+ GPU cache (LRU)', '3 + temporal predictor': '+ predictor: recent tokens',
     '4 + cross-layer + popularity': '+ layer links, popularity', '5 + chooser': '+ pick best predictor', '6 + adaptive budget': '+ adaptive fetch size',
     '7 + lookahead + preemption': '+ look 4 layers ahead', '8 + need eviction + miss overlap': '+ smart eviction',
     '9 + value gate = full design': '+ cost check = our design', '10 oracle predictor': 'Perfect prediction'
@@ -229,7 +234,7 @@
       { name: 'Ours (expert IDs only)', color: 'var(--c0)', width: 3, points: pts('ours (full, adaptive budget)', 'public') }
     ];
     if (S.model === 'Mixtral-8x7B') series.push({ name: 'Hidden state (real H100)', color: 'var(--ok)', width: 3, dashed: true, points: pts(S.metric === 'overlap' ? 'hidden-state (H100)' : 'hidden-state + our budget (H100)', 'h100') });
-    const label = { overlap: 'Accuracy', recall: 'Recall', precision: 'Precision' }[S.metric] || 'Accuracy';
+    const label = { overlap: 'Overlap', recall: 'Recall', precision: 'Precision' }[S.metric] || 'Overlap';
     const shown = series.filter((s) => s.points.some((q) => isFinite(q.y)));
     if (!shown.length) return empty(el, 'No data for this model and batch.');
     lineChart(el, shown, {
@@ -240,7 +245,7 @@
   }
 
   // ---- context length --------------------------------------------------------------------------
-  const CTXPOL = [['on-demand', 'No cache'], ['LRU + overlap', 'LRU'], ['full design', 'Our design'], ['oracle', 'Perfect prediction']];
+  const CTXPOL = [['on-demand', 'On demand'], ['LRU + overlap', 'LRU'], ['full design', 'Our design'], ['oracle', 'Perfect prediction']];
   const altLink = (l) => ((l === 'PCIe 4.0' || l === 'PCIe 5.0') ? 'PCIe 4.0' : 'C2C-900');
   function renderCtx() {
     const el = $('ctx-chart'), l = altLink(S.link);
@@ -256,7 +261,7 @@
   }
 
   // ---- energy ----------------------------------------------------------------------------------
-  const EN = [[OD, 'No cache'], [LRUO, 'LRU'], [FULL, 'Our design'], [ORA, 'Perfect prediction']];
+  const EN = [[OD, 'On demand'], [LRUO, 'LRU'], [FULL, 'Our design'], [ORA, 'Perfect prediction']];
   function renderEnergy() {
     const el = $('energy-chart'), rows = cfgRows(), items = EN.map(([k, n]) => [byRung(rows, k), n]).filter(([r]) => r);
     el.replaceChildren();

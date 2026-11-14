@@ -21,10 +21,11 @@
       </div>
     </div>
     <h1>Predicting and prefetching MoE experts</h1>
-    <p class="lede">MoE experts don't fit in GPU memory, so they wait in CPU memory. We predict which experts come next and copy them to the GPU early.</p>
+    <p class="lede">MoE experts don't fit in GPU memory, so they wait in CPU memory. We predict which experts the next layer will use and copy them to the GPU early. "On demand" means no prediction and no cache: every expert is copied when it is needed.</p>
     <div class="hero">
-      <div class="hero-n"><span id="tk-speed">…</span><small>faster than no cache</small></div>
-      <div class="hero-n"><span id="tk-lru">…</span><small>vs best simple baseline (LRU)</small></div>
+      <div class="hero-n"><span id="tk-acc">…</span><small>prediction accuracy (overlap, next layer)</small></div>
+      <div class="hero-n"><span id="tk-speed">…</span><small>faster than loading on demand</small></div>
+      <div class="hero-n"><span id="tk-lru">…</span><small>vs LRU cache baseline</small></div>
       <p class="muted" id="tk-config">…</p>
     </div>
   </header>
@@ -131,7 +132,8 @@
   <section class="sec" id="glance">
     <div class="sec-h"><div><h2>2 · Results for this setup</h2></div></div>
     <div class="tiles">
-      <div class="card tile"><span class="tile-l">Speedup vs no cache</span><div class="tile-v" id="t-speed">…</div><div class="tile-s" id="t-speed-s"></div></div>
+      <div class="card tile"><span class="tile-l">Prediction accuracy (overlap)</span><div class="tile-v" id="t-acc">…</div><div class="tile-s" id="t-acc-s"></div></div>
+      <div class="card tile"><span class="tile-l">Speedup vs on-demand</span><div class="tile-v" id="t-speed">…</div><div class="tile-s" id="t-speed-s"></div></div>
       <div class="card tile"><span class="tile-l">vs LRU baseline</span><div class="tile-v" id="t-lru">…</div><div class="tile-s" id="t-lru-s"></div></div>
       <div class="card tile"><span class="tile-l">Cache hit rate</span><div class="tile-v" id="t-hit">…</div><div class="tile-s" id="t-hit-s"></div></div>
       <div class="card tile"><span class="tile-l">Energy per token</span><div class="tile-v" id="t-energy">…</div><div class="tile-s" id="t-energy-s"></div></div>
@@ -157,9 +159,9 @@
   <section class="sec" id="prediction">
     <div class="sec-h"><div>
       <h2>5 · Prediction accuracy</h2>
-      <p class="muted">Share of needed experts guessed correctly, 1 to 4 layers ahead.</p>
+      <p class="muted">Overlap: share of the experts actually used that we named in advance, 1 to 4 layers ahead.</p>
     </div>
-    <div class="seg" role="group" aria-label="Metric"><button type="button" data-set="metric:overlap">Accuracy</button><button type="button" data-set="metric:recall">Recall</button><button type="button" data-set="metric:precision">Precision</button></div>
+    <div class="seg" role="group" aria-label="Metric"><button type="button" data-set="metric:overlap">Overlap</button><button type="button" data-set="metric:recall">Recall</button><button type="button" data-set="metric:precision">Precision</button></div>
     </div>
     <div class="card"><div class="chart" id="acc-chart"></div></div>
   </section>
@@ -199,10 +201,10 @@
       </div>
       <div class="card">
         <div class="card-h"><h3>Using the model's hidden state</h3></div>
-        <p class="muted cap">Next-layer accuracy. <span class="key"><i style="background:var(--chart-muted)"></i>expert IDs only</span> <span class="key"><i style="background:var(--c0)"></i>hidden state</span></p>
+        <p class="muted cap">Next-layer overlap. <span class="key"><i style="background:var(--chart-muted)"></i>expert IDs only</span> <span class="key"><i style="background:var(--c0)"></i>hidden state</span></p>
         <div class="bars pair" id="h100acc-chart"></div>
         <div class="table-wrap" style="margin-top:18px"><table class="table">
-          <caption class="muted">Speedup vs no cache</caption>
+          <caption class="muted">Speedup vs on-demand</caption>
           <thead><tr><th>Policy</th><th>Batch 1</th><th>Batch 4</th><th>Batch 16</th></tr></thead>
           <tbody id="h100speed"></tbody>
         </table></div>
