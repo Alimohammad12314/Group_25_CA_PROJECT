@@ -166,3 +166,21 @@ footer { font-size: .8rem; color: var(--muted); border-top: 1px solid var(--line
   .tile-v { font-size: 1.7rem; }
   .controls { position: static; }
 }
+
+/* simplified layout additions */
+.lede { font-size: 1.1rem; max-width: 60ch; }
+.hero { display: flex; flex-wrap: wrap; gap: 14px 40px; align-items: flex-end; margin-top: 6px; }
+.hero-n { display: flex; flex-direction: column; }
+.hero-n span { font-family: var(--font-head); font-weight: 600; font-size: clamp(2.4rem, 6vw, 3.4rem); line-height: 1; font-variant-numeric: tabular-nums; }
+.hero-n small { color: var(--muted); font-size: .85rem; margin-top: 4px; }
+.hero .muted { flex-basis: 100%; }
+.btn.primary { background: var(--c0); border-color: var(--c0); color: #fff; }
+.stepcap { font-size: 1.05rem; font-weight: 500; min-height: 1.6em; margin: 0; text-align: center; max-width: none; }
+.stepcap b { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 50%; background: var(--c1); color: #fff; font-size: .8rem; margin-right: 8px; vertical-align: 2px; }
+.cap { margin: 0 0 12px; }
+.key { display: inline-flex; align-items: center; gap: 5px; margin-left: 10px; white-space: nowrap; }
+.key i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.card-h { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 4px; }
+.badge { font-size: .78rem; padding: 3px 9px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.table caption { text-align: left; padding-bottom: 6px; font-size: .8rem; }
+.insight { font-size: 1rem; font-weight: 500; border-left: 3px solid var(--c1); padding: 4px 0 4px 14px; max-width: 80ch; }

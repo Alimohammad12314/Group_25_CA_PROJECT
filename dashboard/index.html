@@ -14,37 +14,41 @@
 <div class="wrap">
   <header class="head" id="overview">
     <div class="head-top">
-      <span class="eyebrow">CA Project 2 · Group 25 · The MoE memory wall</span>
+      <span class="eyebrow">CA Project 2 · Group 25</span>
       <div class="links">
-        <a href="https://github.com/Alimohammad12314/Group_25_CA_PROJECT">Code on GitHub</a>
+        <a href="https://github.com/Alimohammad12314/Group_25_CA_PROJECT">GitHub</a>
         <button type="button" class="btn" id="theme-btn" aria-label="Switch colour theme">Theme: auto</button>
       </div>
     </div>
     <h1>Predicting and prefetching MoE experts</h1>
-    <p class="take">With the full design, <span id="tk-config">…</span> decodes <b id="tk-speed">…</b> faster than on-demand loading, and at <b id="tk-lru">…</b> the speed of plain LRU with miss overlap.</p>
-    <p class="muted">Expert weights live in host DRAM and are copied into a small HBM cache over PCIe or NVLink-C2C. Every number below comes from our trace-driven simulator replaying real Hugging Face routing traces, except the last section, which ran the real Mixtral-8x7B on an H100.</p>
+    <p class="lede">MoE experts don't fit in GPU memory, so they wait in CPU memory. We predict which experts come next and copy them to the GPU early.</p>
+    <div class="hero">
+      <div class="hero-n"><span id="tk-speed">…</span><small>faster than no cache</small></div>
+      <div class="hero-n"><span id="tk-lru">…</span><small>vs best simple baseline (LRU)</small></div>
+      <p class="muted" id="tk-config">…</p>
+    </div>
   </header>
 
   <div class="controls" id="controls" role="group" aria-label="Configuration">
     <div class="ctl"><label class="ctl-l" for="sel-model">Model</label>
       <select id="sel-model" data-param="model">
-        <option value="Mixtral-8x7B">Mixtral-8x7B (8 experts, top-2)</option>
-        <option value="Grok-1">Grok-1 (8, top-2)</option>
-        <option value="Llama-4 Maverick">Llama-4 Maverick (128, top-1)</option>
-        <option value="DeepSeek-R1">DeepSeek-R1 (256, top-8)</option>
+        <option value="Mixtral-8x7B">Mixtral-8x7B</option>
+        <option value="Grok-1">Grok-1</option>
+        <option value="Llama-4 Maverick">Llama-4 Maverick</option>
+        <option value="DeepSeek-R1">DeepSeek-R1</option>
       </select></div>
     <div class="ctl"><span class="ctl-l" id="lbl-batch">Batch</span>
       <div class="seg" role="group" aria-labelledby="lbl-batch">
         <button type="button" data-set="batch:1">1</button><button type="button" data-set="batch:4">4</button><button type="button" data-set="batch:16">16</button>
       </div></div>
-    <div class="ctl"><label class="ctl-l" for="sel-link">Host link</label>
+    <div class="ctl"><label class="ctl-l" for="sel-link">CPU–GPU link</label>
       <select id="sel-link" data-param="link">
-        <option value="PCIe 4.0">PCIe 4.0 (32 GB/s)</option>
-        <option value="PCIe 5.0">PCIe 5.0 (64 GB/s)</option>
-        <option value="C2C-450">NVLink-C2C 450 GB/s</option>
-        <option value="C2C-900">NVLink-C2C 900 GB/s</option>
+        <option value="PCIe 4.0">PCIe 4 (slow)</option>
+        <option value="PCIe 5.0">PCIe 5</option>
+        <option value="C2C-450">C2C 450</option>
+        <option value="C2C-900">C2C 900 (fast)</option>
       </select></div>
-    <div class="ctl"><span class="ctl-l" id="lbl-cache">HBM cache (share of experts)</span>
+    <div class="ctl"><span class="ctl-l" id="lbl-cache">GPU cache</span>
       <div class="seg" role="group" aria-labelledby="lbl-cache">
         <button type="button" data-set="cache:25%">25 %</button><button type="button" data-set="cache:50%">50 %</button>
       </div></div>
@@ -53,17 +57,17 @@
 
   <section class="sec" id="design">
     <div class="sec-h"><div>
-      <h2>How one MoE layer runs</h2>
-      <p class="muted">Blue arrows carry predictions, grey ones carry expert weights. Step through the seven stages, or click a stage below.</p>
+      <h2>1 · How it works</h2>
+      <p class="muted">Press <b>Next step</b> to follow one layer.</p>
     </div>
     <div class="stepbar">
-      <button type="button" class="btn" data-act="prev">Previous</button>
-      <button type="button" class="btn" data-act="next">Next step</button>
-      <button type="button" class="btn" data-act="play" aria-pressed="false">Play / pause</button>
-      <button type="button" class="btn" data-act="all">Show all</button>
+      <button type="button" class="btn" data-act="prev" aria-label="Previous step">◀</button>
+      <button type="button" class="btn primary" data-act="next">Next step</button>
+      <button type="button" class="btn" data-act="play" aria-pressed="false">Play</button>
+      <button type="button" class="btn" data-act="all">Reset</button>
     </div></div>
     <div class="card arch-wrap">
-      <svg class="arch" viewBox="0 0 800 330" role="img" aria-label="Architecture: router, predictor, prefetcher, host link, HBM expert cache and expert compute, with seven numbered steps">
+      <svg class="arch" viewBox="0 0 800 330" role="img" aria-label="How one layer runs: router, predictor, prefetcher, link, GPU cache and experts, in seven steps">
       <defs>
       <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mk" d="M0,0 L10,5 L0,10 z"></path></marker>
       <marker id="ahc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="mkc" d="M0,0 L10,5 L0,10 z"></path></marker>
@@ -72,14 +76,13 @@
       <rect class="grp" x="250" y="168" width="535" height="146" rx="10"></rect>
       <text class="t" x="262" y="188">GPU</text>
       <g data-steps="5"><rect class="bx" x="18" y="186" width="132" height="120" rx="8"></rect>
-      <text class="t" x="84" y="212" text-anchor="middle">Host DRAM</text>
-      <text class="s" x="84" y="290" text-anchor="middle">all routed experts</text>
+      <text class="t" x="84" y="212" text-anchor="middle">CPU memory</text>
+      <text class="s" x="84" y="290" text-anchor="middle">all experts live here</text>
       <g class="s"><rect x="40" y="226" width="20" height="14" rx="2" class="chip"></rect><rect x="64" y="226" width="20" height="14" rx="2" class="chip"></rect><rect x="88" y="226" width="20" height="14" rx="2" class="chip"></rect><rect x="40" y="246" width="20" height="14" rx="2" class="chip"></rect><rect x="64" y="246" width="20" height="14" rx="2" class="chip"></rect><rect x="88" y="246" width="20" height="14" rx="2" class="chip"></rect><rect x="112" y="226" width="20" height="14" rx="2" class="chip"></rect><rect x="112" y="246" width="20" height="14" rx="2" class="chip"></rect></g>
       </g>
       <g data-steps="6 7"><rect class="bx" x="264" y="200" width="176" height="100" rx="8"></rect>
-      <text class="t" x="352" y="222" text-anchor="middle">HBM expert cache</text>
-      <text class="s" x="352" y="270" text-anchor="middle">keeps experts needed</text>
-      <text class="s" x="352" y="285" text-anchor="middle">in the next 4 tokens</text>
+      <text class="t" x="352" y="222" text-anchor="middle">GPU cache (HBM)</text>
+      <text class="s" x="352" y="275" text-anchor="middle">holds a few experts</text>
       <rect x="300" y="234" width="20" height="14" rx="2" class="chip hot"></rect><rect x="324" y="234" width="20" height="14" rx="2" class="chip hot"></rect><rect x="348" y="234" width="20" height="14" rx="2" class="chip hot"></rect><rect x="372" y="234" width="20" height="14" rx="2" class="chip hot"></rect>
       </g>
       <g data-steps="1"><rect class="bx" x="462" y="214" width="92" height="50" rx="7"></rect><text x="508" y="244" text-anchor="middle">Attention</text></g>
@@ -89,14 +92,13 @@
       <path class="ar" d="M658,239 L676,239" data-steps="7"></path>
       <g data-steps="3 4"><rect class="bx ctl" x="150" y="18" width="240" height="96" rx="8"></rect>
       <text class="t" x="270" y="44" text-anchor="middle">Prefetcher</text>
-      <text class="s" x="270" y="66" text-anchor="middle">lookahead up to 4 layers</text>
-      <text class="s" x="270" y="82" text-anchor="middle">only what the link delivers in time</text>
-      <text class="s" x="270" y="98" text-anchor="middle">only when saving beats cost</text>
+      <text class="s" x="270" y="74" text-anchor="middle">copies likely experts</text>
+      <text class="s" x="270" y="92" text-anchor="middle">before they are needed</text>
       </g>
       <g data-steps="2 3 6"><rect class="bx ctl" x="430" y="18" width="352" height="96" rx="8"></rect>
-      <text class="t" x="606" y="44" text-anchor="middle">Predictor (training-free)</text>
-      <text class="s" x="606" y="68" text-anchor="middle">temporal votes · cross-layer table · popularity</text>
-      <text class="s" x="606" y="86" text-anchor="middle">calibrate → weight → batch union → budget top-(k+δ)</text>
+      <text class="t" x="606" y="44" text-anchor="middle">Predictor</text>
+      <text class="s" x="606" y="74" text-anchor="middle">guesses which experts the</text>
+      <text class="s" x="606" y="92" text-anchor="middle">next layers will need</text>
       </g>
       <path class="ar ctl" d="M616,212 L616,117" data-steps="2"></path>
       <path class="ar ctl" d="M428,66 L393,66" data-steps="3"></path>
@@ -108,151 +110,111 @@
       <g class="num" data-steps="1"><circle cx="560" cy="200" r="10"></circle><text x="560" y="204" text-anchor="middle">1</text></g>
       <g class="num" data-steps="3"><circle cx="410" cy="48" r="10"></circle><text x="410" y="52" text-anchor="middle">3</text></g>
       <g class="num" data-steps="4"><circle cx="200" cy="166" r="10"></circle><text x="200" y="170" text-anchor="middle">4</text></g>
-      <g class="num" data-steps="5"><circle cx="205" cy="268" r="10"></circle><text x="205" y="272" text-anchor="middle">5</text></g>
+      <g class="num" data-steps="5"><circle cx="172" cy="228" r="10"></circle><text x="172" y="232" text-anchor="middle">5</text></g>
       <g class="num" data-steps="6"><circle cx="440" cy="156" r="10"></circle><text x="440" y="160" text-anchor="middle">6</text></g>
       <g class="num" data-steps="7"><circle cx="580" cy="292" r="10"></circle><text x="580" y="296" text-anchor="middle">7</text></g>
-      <text class="s" x="205" y="236" text-anchor="middle">PCIe / C2C</text>
+      <text class="s" x="205" y="282" text-anchor="middle">PCIe / C2C link</text>
       </svg>
     </div>
-    <ol class="steps" aria-label="Steps">
-      <li data-cap="1" tabindex="0">The router picks this layer's experts for every sequence in the batch, replayed from the real trace.</li>
-      <li data-cap="2" tabindex="0">That choice goes to the predictor as history. It only ever learns from what the router really did.</li>
-      <li data-cap="3" tabindex="0">The predictor estimates how likely each expert is at layers l+1 to l+4 and hands that to the prefetcher.</li>
-      <li data-cap="4" tabindex="0">The prefetcher requests likely experts early, capped by link time and by an expected-value gate.</li>
-      <li data-cap="5" tabindex="0">The link copies weights from host DRAM into HBM. Demand misses preempt prefetches at 16 MB chunks.</li>
-      <li data-cap="6" tabindex="0">The same predictions decide what the HBM cache evicts: the expert least likely needed in the next 4 tokens.</li>
-      <li data-cap="7" tabindex="0">Experts run on weights already in HBM; any still arriving run as soon as they land. The next layer starts at step 1.</li>
+    <p class="stepcap" id="stepcap" aria-live="polite">Blue = predictions · grey = expert weights</p>
+    <ol class="steps" aria-label="Steps" hidden>
+      <li data-cap="1">Router picks this layer's experts.</li>
+      <li data-cap="2">The predictor learns from that choice.</li>
+      <li data-cap="3">It guesses the experts for the next 4 layers.</li>
+      <li data-cap="4">The prefetcher asks for those experts early.</li>
+      <li data-cap="5">The link copies them from CPU to GPU memory. Real misses go first.</li>
+      <li data-cap="6">The cache keeps the experts most likely needed soon.</li>
+      <li data-cap="7">Experts run from GPU memory. Next layer: back to step 1.</li>
     </ol>
   </section>
 
   <section class="sec" id="glance">
-    <div class="sec-h"><div>
-      <h2>Selected configuration at a glance</h2>
-      <p class="muted" id="cfg-label">…</p>
-    </div></div>
+    <div class="sec-h"><div><h2>2 · Results for this setup</h2></div></div>
     <div class="tiles">
-      <div class="card tile"><span class="tile-l">Full design vs on-demand</span><div class="tile-v" id="t-speed">…</div><div class="tile-s" id="t-speed-s"></div></div>
-      <div class="card tile"><span class="tile-l">Full design vs LRU + miss overlap</span><div class="tile-v" id="t-lru">…</div><div class="tile-s" id="t-lru-s"></div></div>
-      <div class="card tile"><span class="tile-l">HBM hit rate, full design</span><div class="tile-v" id="t-hit">…</div><div class="tile-s" id="t-hit-s"></div></div>
-      <div class="card tile"><span class="tile-l">Time waiting on the link, on-demand</span><div class="tile-v" id="t-stall">…</div><div class="tile-s" id="t-stall-s"></div></div>
-      <div class="card tile"><span class="tile-l">Energy per token, full design</span><div class="tile-v" id="t-energy">…</div><div class="tile-s" id="t-energy-s"></div></div>
+      <div class="card tile"><span class="tile-l">Speedup vs no cache</span><div class="tile-v" id="t-speed">…</div><div class="tile-s" id="t-speed-s"></div></div>
+      <div class="card tile"><span class="tile-l">vs LRU baseline</span><div class="tile-v" id="t-lru">…</div><div class="tile-s" id="t-lru-s"></div></div>
+      <div class="card tile"><span class="tile-l">Cache hit rate</span><div class="tile-v" id="t-hit">…</div><div class="tile-s" id="t-hit-s"></div></div>
+      <div class="card tile"><span class="tile-l">Energy per token</span><div class="tile-v" id="t-energy">…</div><div class="tile-s" id="t-energy-s"></div></div>
     </div>
   </section>
 
   <section class="sec" id="ladder">
     <div class="sec-h"><div>
-      <h2>What each component adds</h2>
-      <p class="muted">Speedup over on-demand loading as components are switched on one at a time. The dashed line marks LRU + miss overlap, the strongest baseline without prediction. Hover or tap a bar for hit rate, traffic and stall.</p>
-    </div>
-    <div class="ctl"><span class="ctl-l" id="lbl-ref">Reference policies</span>
-      <div class="seg" role="group" aria-labelledby="lbl-ref"><button type="button" data-set="ref:off">Hide</button><button type="button" data-set="ref:on">Show</button></div></div>
-    </div>
-    <div class="card">
-      <div class="legend" style="margin-bottom:12px"><span class="leg"><span class="sw box" style="background:var(--chart-muted)"></span>No prediction</span><span class="leg"><span class="sw box" style="background:var(--c0)"></span>Our components</span><span class="leg"><span class="sw box" style="background:var(--c2)"></span>Oracle (perfect prediction)</span><span class="leg"><span class="sw box" style="background:var(--c1)"></span>Reference policies</span></div>
-      <div class="bars" id="ladder-chart"></div>
-    </div>
+      <h2>3 · What each part adds</h2>
+      <p class="muted">Speedup as we switch parts on. Dashed line = LRU baseline.</p>
+    </div></div>
+    <div class="card"><div class="bars" id="ladder-chart"></div></div>
   </section>
 
   <section class="sec" id="where">
     <div class="sec-h"><div>
-      <h2>Where the design helps, gives little, or hurts</h2>
-      <p class="muted">Full design divided by LRU + miss overlap, for the selected cache size. Above 1.00 (green) our design is faster; below (red) LRU wins. Click a cell to select that configuration.</p>
+      <h2>4 · Where it wins</h2>
+      <p class="muted"><span class="good">Green</span>: faster than LRU. <span class="bad">Red</span>: slower. Click a cell to select it.</p>
     </div></div>
     <div class="card heat-wrap" id="heat"></div>
   </section>
 
   <section class="sec" id="prediction">
     <div class="sec-h"><div>
-      <h2>How well experts are predicted ahead of time</h2>
-      <p class="muted">For the selected model and batch: share of the needed experts each predictor named in advance, by how many layers ahead it predicted. Solid lines use the public trace. For Mixtral, dashed lines are the live H100 run on the same tokens.</p>
+      <h2>5 · Prediction accuracy</h2>
+      <p class="muted">Share of needed experts guessed correctly, 1 to 4 layers ahead.</p>
     </div>
-    <div class="ctl"><span class="ctl-l" id="lbl-metric">Metric</span>
-      <div class="seg" role="group" aria-labelledby="lbl-metric"><button type="button" data-set="metric:overlap">Overlap</button><button type="button" data-set="metric:recall">Recall</button><button type="button" data-set="metric:precision">Precision</button><button type="button" data-set="metric:fullcov">Full coverage</button></div></div>
+    <div class="seg" role="group" aria-label="Metric"><button type="button" data-set="metric:overlap">Accuracy</button><button type="button" data-set="metric:recall">Recall</button><button type="button" data-set="metric:precision">Precision</button></div>
     </div>
     <div class="card"><div class="chart" id="acc-chart"></div></div>
   </section>
 
-  <section class="sec" id="context">
+  <section class="sec" id="more">
     <div class="sec-h"><div>
-      <h2>Context length</h2>
-      <p class="muted">Token latency (ms) as the context grows. Longer contexts make attention slower, and with the cache that physically fits, the KV cache pushes experts out of HBM.</p>
-      <p class="note" id="ctx-note"></p>
+      <h2>6 · Context, energy, real routing</h2>
     </div>
-    <div class="ctl"><span class="ctl-l" id="lbl-ctxc">HBM cache</span>
-      <div class="seg" role="group" aria-labelledby="lbl-ctxc"><button type="button" data-set="ctxcache:25%">25 % of experts</button><button type="button" data-set="ctxcache:physical">What fits beside the KV cache</button></div></div>
+    <div class="seg" role="group" aria-label="Chart"><button type="button" data-set="more:ctx">Context length</button><button type="button" data-set="more:energy">Energy</button><button type="button" data-set="more:bonus">Real vs uniform routing</button></div>
     </div>
-    <div class="card"><div class="chart" id="ctx-chart"></div></div>
-  </section>
-
-  <section class="sec" id="energy">
-    <div class="sec-h"><div>
-      <h2>Energy: fewer stalls against more traffic</h2>
-      <p class="muted">Joules per decoded token, split into link transfer, GPU compute and background power while the GPU waits. Prefetching adds transfer energy; cutting stall time removes background energy.</p>
-    </div></div>
     <div class="card">
-      <div class="legend" style="margin-bottom:12px"><span class="leg"><span class="sw box" style="background:var(--c0)"></span>Transfer</span><span class="leg"><span class="sw box" style="background:var(--c1)"></span>Compute</span><span class="leg"><span class="sw box" style="background:var(--chart-muted)"></span>Background (waiting)</span></div>
-      <div class="bars" id="energy-chart"></div>
-    </div>
-  </section>
-
-  <section class="sec" id="bonus">
-    <div class="sec-h"><div>
-      <h2>Bonus: real routing inside LLMSimulator</h2>
-      <p class="muted">We patched LLMSimulator to replay the Hugging Face routing traces. Speedup over on-demand with real routing against the simulator's default uniform routing, 25 % cache.</p>
-      <p class="note" id="bonus-note"></p>
-    </div></div>
-    <div class="card">
-      <div class="legend" style="margin-bottom:12px"><span class="leg"><span class="sw box" style="background:var(--c0)"></span>Real routing (trace)</span><span class="leg"><span class="sw box" style="background:var(--chart-muted)"></span>Uniform routing</span></div>
-      <div class="bars pair" id="bonus-chart"></div>
+      <div data-more="ctx">
+        <p class="muted cap">Token latency (ms) as the prompt gets longer. <span id="ctx-note"></span></p>
+        <div class="chart" id="ctx-chart"></div>
+      </div>
+      <div data-more="energy" hidden>
+        <p class="muted cap">Joules per token. <span class="key"><i style="background:var(--c0)"></i>copying</span> <span class="key"><i style="background:var(--c1)"></i>computing</span> <span class="key"><i style="background:var(--chart-muted)"></i>GPU waiting</span></p>
+        <div class="bars" id="energy-chart"></div>
+      </div>
+      <div data-more="bonus" hidden>
+        <p class="muted cap">Bonus: LLMSimulator replaying the real traces. <span class="key"><i style="background:var(--c0)"></i>real routing</span> <span class="key"><i style="background:var(--chart-muted)"></i>uniform (default)</span> <span id="bonus-note"></span></p>
+        <div class="bars pair" id="bonus-chart"></div>
+      </div>
     </div>
   </section>
 
   <section class="sec" id="h100">
     <div class="sec-h"><div>
-      <span class="pill">Fixed: Mixtral-8x7B · H100 NVL · PCIe 5.0 · context 1024</span>
-      <h2>Validation on a real H100</h2>
-      <p class="muted">The real Mixtral-8x7B ran with its experts in host memory and a bounded HBM cache. These charts do not follow the controls above.</p>
+      <h2>7 · Checked on a real H100</h2>
+      <p class="muted">Real Mixtral-8x7B, PCIe 5. Not affected by the controls.</p>
     </div></div>
     <div class="two">
       <div class="card">
-        <div class="sec-h" style="margin-bottom:10px"><div><h3>Simulator against the real GPU</h3>
-          <p class="muted">Token latency of every real run. Median error: <b id="h100-err">…</b></p></div>
-          <div class="seg" role="group" aria-label="Simulator costs"><button type="button" data-set="h100:calibrated">Measured costs</button><button type="button" data-set="h100:default">Default costs</button></div>
-        </div>
+        <div class="card-h"><h3>Simulator vs real GPU</h3><span class="badge" id="h100-err">…</span></div>
+        <p class="muted cap">Each dot is one run. On the line = exact match.</p>
         <div class="chart" id="h100-chart"></div>
       </div>
       <div class="card">
-        <h3>Hidden-state predictor accuracy</h3>
-        <p class="muted" style="margin:5px 0 12px">Next-layer overlap on the same tokens. ID-only uses expert IDs, as the public traces allow. Hidden-state applies the next layer's router to the current hidden state (training-free).</p>
-        <div class="legend" style="margin-bottom:12px"><span class="leg"><span class="sw box" style="background:var(--chart-muted)"></span>ID-only (ours)</span><span class="leg"><span class="sw box" style="background:var(--c0)"></span>Hidden-state</span></div>
+        <div class="card-h"><h3>Using the model's hidden state</h3></div>
+        <p class="muted cap">Next-layer accuracy. <span class="key"><i style="background:var(--chart-muted)"></i>expert IDs only</span> <span class="key"><i style="background:var(--c0)"></i>hidden state</span></p>
         <div class="bars pair" id="h100acc-chart"></div>
+        <div class="table-wrap" style="margin-top:18px"><table class="table">
+          <caption class="muted">Speedup vs no cache</caption>
+          <thead><tr><th>Policy</th><th>Batch 1</th><th>Batch 4</th><th>Batch 16</th></tr></thead>
+          <tbody id="h100speed"></tbody>
+        </table></div>
       </div>
     </div>
-    <div class="card">
-      <h3>Does better prediction make it faster?</h3>
-      <p class="muted" style="margin:5px 0 12px">Speedup over on-demand with the costs measured on the H100. At batch 1 one expert copy takes far longer than a layer computes, so even perfect predictions cannot hide it. At batch 4 and 16 our design is already close to the oracle.</p>
-      <div class="table-wrap"><table class="table">
-        <thead><tr><th>Policy</th><th>Batch 1</th><th>Batch 4</th><th>Batch 16</th></tr></thead>
-        <tbody id="h100speed"></tbody>
-      </table></div>
-    </div>
+    <p class="insight">Hidden-state prediction doubles accuracy, but speed barely moves: on PCIe, copying an expert takes far longer than computing a layer.</p>
   </section>
 
-  <details id="method">
-    <summary>How these numbers were made</summary>
-    <ul>
-      <li>Main results: our trace-driven decode timeline on a simulated A100-80GB in FP16, with all routed experts in host DRAM. Every latency and energy cost comes from LLMSimulator; with caching and prefetching off, the timeline reproduces LLMSimulator's own numbers.</li>
-      <li>Routing: real Hugging Face traces for Mixtral-8x7B, Llama-4 Maverick and DeepSeek-R1. Grok-1 has no public trace; its routing is synthetic, fitted to Mixtral.</li>
-      <li>Full design: temporal, cross-layer and popularity predictors, calibrated and combined; adaptive prefetch budget; lookahead up to 4 layers with demand-first link scheduling; predicted-need eviction; miss overlap; expected-value gate.</li>
-      <li>H100: the real Mixtral-8x7B on an H100 NVL over PCIe 5.0. "Measured costs" means the simulator used link and compute costs measured on that card.</li>
-      <li>Data: <code>data.js</code> is generated from the repository's result CSVs by <code>dashboard/build_data.py</code>.</li>
-    </ul>
-  </details>
-
   <footer>
-    <span>Group 25: Palak Mishra, Mohammad Ali, Shivansh Bhatnagar</span>
-    <span>CA Project 2, IIIT Delhi</span>
-    <a href="https://github.com/Alimohammad12314/Group_25_CA_PROJECT">github.com/Alimohammad12314/Group_25_CA_PROJECT</a>
+    <span>Group 25: Palak Mishra, Mohammad Ali, Shivansh Bhatnagar · CA Project 2, IIIT Delhi</span>
+    <span>Simulated A100 with real Hugging Face routing traces; costs from LLMSimulator. Grok-1 routing is synthetic.</span>
+    <a href="https://github.com/Alimohammad12314/Group_25_CA_PROJECT">Code and full results on GitHub</a>
   </footer>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
