@@ -31,8 +31,29 @@ build() {
   echo "   built     ${1#$ROOT/}/build/run"
 }
 
-echo "▶ fetching submodules"
-git -C "$ROOT" submodule update --init --recursive
+# Simulator sources, pinned to the exact commits this project was built and validated on.
+LLMSIM_URL=https://github.com/scale-snu/LLMSimulator.git
+SSD_COMMIT=3a0ea80c343ac52b67e0945fca7bbdb8a7a4adef    # LLMSimulator/          (SSD-offloading copy)
+ORIG_COMMIT=419252761fbdb95b789778a02256d458a5537ec7   # external/LLMSimulator/ (original)
+
+fetch_pinned() {   # used when the project was unpacked from the submission ZIP (no .git, no submodules)
+  local dir=$1 commit=$2
+  if [ ! -e "$dir/CMakeLists.txt" ]; then
+    rm -rf "$dir"; mkdir -p "$(dirname "$dir")"
+    git clone -q "$LLMSIM_URL" "$dir"
+  fi
+  if [ "$(git -C "$dir" rev-parse HEAD)" != "$commit" ]; then git -C "$dir" checkout -q "$commit"; fi
+  git -C "$dir" submodule update --init --recursive -q
+  echo "   fetched   ${dir#$ROOT/} @ ${commit:0:7}"
+}
+
+echo "▶ fetching simulators"
+if git -C "$ROOT" ls-files --stage LLMSimulator 2>/dev/null | grep -q '^160000'; then
+  git -C "$ROOT" submodule update --init --recursive        # git clone of the repository
+else
+  fetch_pinned "$ROOT/LLMSimulator" "$SSD_COMMIT"           # unpacked ZIP
+  fetch_pinned "$ROOT/external/LLMSimulator" "$ORIG_COMMIT"
+fi
 
 echo "▶ patching SSD-offloading simulator (LLMSimulator/)"
 SSD="$ROOT/LLMSimulator"

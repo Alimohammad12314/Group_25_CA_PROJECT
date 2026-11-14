@@ -35,14 +35,15 @@ This repository is a fork of SSD-offloading. It adds our experiment code, result
    - [Reference list](#reference-list)
 3. [Mid-evaluation](#mid-evaluation) (Q1-Q4, Q4-extended)
 4. [Repository layout](#repository-layout)
-5. [Setup on a new machine](#setup-on-a-new-machine)
+5. [Submission artifact (ZIP)](#submission-artifact-zip): what is left out and where to get it
+6. [Setup on a new machine](#setup-on-a-new-machine)
    - [Prerequisites](#prerequisites)
    - [1. Clone](#1-clone-with-submodules) · [2. Patch and build the simulators](#2-patch-and-build-both-simulators) ·
      [3. Python packages](#3-python-packages) · [4. Regenerate figures](#4-regenerate-figures-fast-no-simulation) ·
      [5. Re-run mid-evaluation simulations](#5-re-run-the-simulations-optional) ·
      [6. End-semester experiments](#6-end-semester-experiments)
-6. [Simulation conventions](#simulation-conventions)
-7. [Upstream: SSD-offloading](#upstream-ssd-offloading)
+7. [Simulation conventions](#simulation-conventions)
+8. [Upstream: SSD-offloading](#upstream-ssd-offloading)
 
 **Interactive dashboard:** <https://alimohammad12314.github.io/Group_25_CA_PROJECT/> (source in [`dashboard/`](dashboard/README.md)): architecture walkthrough and every result, with controls for model, batch, link and cache.
 
@@ -289,6 +290,28 @@ The overview of all results is in [`results-ca/README.md`](results-ca/README.md)
     ├── simulator_patches/       # our changes to both simulators (+ README explaining each change)
     └── requirements.txt
 ```
+
+## Submission artifact (ZIP)
+
+The ZIP `GroupNo_25_ProjectNo_2.zip` is this repository built by [`make_submission.sh`](make_submission.sh), plus the
+report and slides in `report/`. It holds the source code, our simulator patches, configuration files, experiment and
+plotting scripts, and the processed results behind every figure and table.
+
+**Left out on purpose** (as the course asks) and how to get each one back:
+
+| Not in the ZIP | How to get it |
+|---|---|
+| LLMSimulator sources (both copies) | `./setup.sh` clones `https://github.com/scale-snu/LLMSimulator.git` at the pinned commits `3a0ea80` (`LLMSimulator/`, SSD-offloading copy) and `4192527` (`external/LLMSimulator/`, original), applies the authors' patches and ours from `results-ca/simulator_patches/`, and builds both |
+| Mixtral-8x7B routing trace | Hugging Face dataset `allenai/analysis_mixtral`, file `c4_results.jsonl` (<https://huggingface.co/datasets/allenai/analysis_mixtral>); `python -m traces.download mixtral` downloads and converts it |
+| Llama-4 Maverick and DeepSeek-R1 routing traces | gated Hugging Face dataset `core12345/MoE_expert_selection_trace` (<https://huggingface.co/datasets/core12345/MoE_expert_selection_trace>), folders `meta-llama/Llama-4-Maverick-17B-128E-Instruct/` and `cognitivecomputations/DeepSeek-R1-AWQ/`, benchmarks `HuggingFaceH4/aime_2024`, `livecodebench`, `mmlu`; accept the terms, `hf auth login`, then `python -m traces.download llama4_maverick deepseekR1` |
+| Grok-1 trace | none exists publicly; `python -m traces.synthetic grok1` generates it (calibrated to Mixtral) |
+| Raw simulator run folders `results-ca/*/runs/` (about 230 MB) | re-created by the run scripts in step 5 below; one representative run is kept: `results-ca/q2_offload_load_vs_exec/runs/A100_mixtral_b1_base/` (`config.yaml`, `output.csv`, `run.log`). `q4_analysis.py` reads the Q4 runs, so run `q4_routing_runs.py` / `q4x_router_runs.py` before regenerating the Q4 figures |
+| Raw H100 hidden-state predictions `endsem/gpu/results/hs_pred_*.npz` (40 MB) | one kept (`hs_pred_b1_ctx1024.npz`); the rest are re-created on a GPU by `python -m gpu.hs_predictor` ([`endsem/GPU.md`](endsem/GPU.md)); the scored results are in `endsem/results/e7_hybrid_*/` and `endsem/gpu/results/` |
+| Built binaries, build folders, caches, cached prediction streams | rebuilt by `./setup.sh` and by the experiments |
+
+**Reproduce from the ZIP:** unzip, then follow [Setup on a new machine](#setup-on-a-new-machine) from step 2
+(`./setup.sh` needs `git` and internet access to fetch the simulator). Step 1 (`git clone`) is only for the GitHub copy.
+Representative logs: `results-ca/logs/*.log` (mid-evaluation runs) and `endsem/results/e*_run.log` (end-semester runs).
 
 ## Setup on a new machine
 
