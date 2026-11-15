@@ -152,6 +152,10 @@ for Llama-4 the design looks 1.3x better than on-demand with uniform routing but
   guess cannot be hidden; the value gate correctly blocks most prefetches. Live on the GPU the predictor itself costs
   11-15 ms per token in our Python runtime (1.28x vs 1.32x without it).
 
+![simulator vs real H100](docs/figures/fig8_h100_sim_vs_real.png)
+
+![hidden-state predictor](docs/figures/fig9_hidden_state_accuracy.png)
+
 **Expert-load latency** (batch 16, 25 % cache, ms; `results/e3_ablation/ablation.csv`):
 
 | Model, link | one expert, idle link | demand load, LRU + overlap | demand load, full design | wait per needed expert, LRU + overlap → full design |

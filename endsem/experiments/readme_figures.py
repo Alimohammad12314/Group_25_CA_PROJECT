@@ -287,6 +287,81 @@ def fig_energy():
          "HBM cache = what fits in 80 GB. Most energy is background power burned while the GPU waits on the link.")
 
 
+# 8. real H100: simulator against the real GPU, with default and with measured costs
+def fig_h100_validation():
+    g = pd.read_csv(os.path.join(ROOT, "gpu", "results", "compare.csv"))
+    g = g[g.real_token_latency_ms > 0]
+    fig, axes = plt.subplots(1, 2, figsize=(9.6, 4.2), sharex=True, sharey=True)
+    cases = [("sim_default_token_latency_ms", "Default costs (LLMSimulator, nominal PCIe 5.0)"),
+             ("sim_cal_token_latency_ms", "Costs measured on the H100")]
+    lo = min(g.real_token_latency_ms.min(), g[[c for c, _ in cases]].min().min()) * 0.85
+    hi = max(g.real_token_latency_ms.max(), g[[c for c, _ in cases]].max().max()) * 1.15
+    for ax, (col, title) in zip(axes, cases):
+        d = g[g[col] > 0]
+        err = ((d[col] - d.real_token_latency_ms).abs() / d.real_token_latency_ms).median() * 100
+        ax.plot([lo, hi], [lo, hi], color=MUTED, linewidth=1, linestyle="--", label="simulated = real")
+        for b, c in ((1, S[0]), (4, S[1]), (16, S[6])):
+            e = d[d.batch == b]
+            ax.scatter(e.real_token_latency_ms, e[col], s=26, color=c, alpha=0.85, edgecolor=SURFACE, linewidth=0.6,
+                       label=f"batch {b}", zorder=3)
+        ax.set_xscale("log"); ax.set_yscale("log")
+        ax.set_xlim(lo, hi); ax.set_ylim(lo, hi)
+        ticks = [t for t in (200, 300, 500, 1000, 1500) if lo <= t <= hi]
+        ax.set_xticks(ticks); ax.set_xticklabels([f"{t:,}" for t in ticks])
+        ax.set_yticks(ticks); ax.set_yticklabels([f"{t:,}" for t in ticks])
+        ax.minorticks_off()
+        ax.set_title(f"{title}\nmedian error {err:.1f} % over {len(d)} runs", loc="left")
+        ax.set_xlabel("real token latency on the H100 (ms)")
+    axes[0].set_ylabel("simulated token latency (ms)")
+    axes[0].legend(loc="upper left")
+    save(fig, "fig8_h100_sim_vs_real.png", "The simulator matches a real H100 once costs are measured",
+         "Real Mixtral-8x7B on an H100 NVL, experts in host memory, PCIe 5.0; every dot is one real run (on-demand, LRU, "
+         "prefetching, full design, oracle; batch 1/4/16; 25 / 50 % cache). Hit rate and traffic match exactly; latency "
+         "depends on the link and compute costs used.")
+
+
+# 9. hidden-state predictor on the H100: accuracy doubles, speed barely moves
+def fig_hidden_state():
+    a = pd.read_csv(os.path.join(RESULTS, "e7_hybrid_calibrated", "accuracy.csv"))
+    a = a[(a.context == 1024) & (a.distance == 1)]
+    p = pd.read_csv(os.path.join(RESULTS, "e7_hybrid_calibrated", "policies.csv"))
+    p = p[(p.context == 1024) & (p.link == "PCIe5")]
+    batches = [1, 4, 16]
+    fig, axes = plt.subplots(1, 2, figsize=(10, 4.4))
+    ax = axes[0]
+    x = np.arange(len(batches)); w = 0.36
+    for i, (pred, lab, c) in enumerate((("ID-only (ours)", "expert IDs only (ours)", NEUTRAL),
+                                        ("hidden-state (H100)", "hidden state (H100)", S[0]))):
+        v = [a[(a.batch == b) & (a.predictor == pred)].overlap.iloc[0] * 100 for b in batches]
+        bars = ax.bar(x + (i - 0.5) * w, v, w, color=c, edgecolor=SURFACE, linewidth=1.2, label=lab)
+        for r, val in zip(bars, v):
+            ax.text(r.get_x() + r.get_width() / 2, val + 1.5, f"{val:.0f}%", ha="center", va="bottom", fontsize=8.5)
+    ax.set_xticks(x); ax.set_xticklabels([f"batch {b}" for b in batches])
+    ax.set_ylim(0, 112); ax.set_ylabel("next-layer overlap (%)")
+    ax.grid(axis="x", visible=False)
+    ax.set_title("Prediction accuracy, same tokens", loc="left")
+    ax.legend(loc="upper center", ncol=2, bbox_to_anchor=(0.5, -0.1))
+    ax = axes[1]
+    pols = [("LRU + overlap", "LRU + miss overlap", NEUTRAL), ("full design [ID-only (ours)]", "ours, expert IDs", S[1]),
+            ("full design [hidden-state (H100)]", "ours, hidden state", S[0]), ("oracle", "perfect prediction", S[6])]
+    w = 0.2
+    for i, (pol, lab, c) in enumerate(pols):
+        v = [p[(p.batch == b) & (p.policy == pol)].speedup.iloc[0] for b in batches]
+        bars = ax.bar(x + (i - 1.5) * w, v, w, color=c, edgecolor=SURFACE, linewidth=1.2, label=lab)
+        for r, val in zip(bars, v):
+            ax.text(r.get_x() + r.get_width() / 2, val + 0.03, f"{val:.2f}", ha="center", va="bottom", fontsize=7.5)
+    ax.axhline(1.0, color=MUTED, linewidth=1)
+    ax.set_xticks(x); ax.set_xticklabels([f"batch {b}" for b in batches])
+    ax.set_ylim(0, 2.0); ax.set_ylabel("speedup over on-demand")
+    ax.grid(axis="x", visible=False)
+    ax.set_title("Speed with H100-measured costs (PCIe 5.0)", loc="left")
+    ax.legend(loc="upper center", ncol=2, bbox_to_anchor=(0.5, -0.1))
+    save(fig, "fig9_hidden_state_accuracy.png", "Hidden-state prediction doubles accuracy but barely changes speed",
+         "Applying the next layer's router to the current hidden state (training-free) lifts next-layer overlap from 42 % "
+         "to 86 % at batch 1. Speed moves only from 1.36x to 1.40x: on PCIe one expert copy takes far longer than a layer "
+         "computes, and at batch 4-16 our design is already within 1 % of perfect prediction.")
+
+
 def main():
     fig_problem()
     fig_predictor()
@@ -295,6 +370,8 @@ def main():
     fig_context()
     fig_bonus()
     fig_energy()
+    fig_h100_validation()
+    fig_hidden_state()
 
 
 if __name__ == "__main__":
