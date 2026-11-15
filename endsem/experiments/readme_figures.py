@@ -362,6 +362,117 @@ def fig_hidden_state():
          "computes, and at batch 4-16 our design is already within 1 % of perfect prediction.")
 
 
+# 10 and 11: baseline vs prefetching configurations (latency, stall, expert-load latency; traffic and energy)
+CMP_POLICIES = [("on-demand", "1 on-demand, no cache"), ("LRU + miss overlap", "LRU + miss overlap (no prediction)"),
+                ("naive prefetch", "5 + chooser"), ("full design", "9 + value gate = full design"),
+                ("oracle predictor", "10 oracle predictor")]
+
+
+def _cmp_rows(e3, m, b, ln):
+    s = e3[(e3.model == m) & (e3.batch == b) & (e3.link == ln)].set_index("rung")
+    return [(lab, s.loc[r]) for lab, r in CMP_POLICIES]
+
+
+def _e3_25():
+    e3 = pd.read_csv(os.path.join(RESULTS, "e3_ablation", "ablation.csv"))
+    return e3[e3.ratio_setting == 0.25]
+
+
+def fig_latency_stall():
+    e3 = _e3_25()
+    cases = [("mixtral", 16, "C2C-900", "Mixtral, batch 16, NVLink-C2C 900: prefetching helps"),
+             ("mixtral", 1, "PCIe4", "Mixtral, batch 1, PCIe 4.0: prefetching cannot help")]
+    fig, axes = plt.subplots(2, 2, figsize=(10.5, 6.6), gridspec_kw=dict(height_ratios=[1, 1]))
+    for col, (m, b, ln, title) in enumerate(cases):
+        rows = _cmp_rows(e3, m, b, ln)
+        y = np.arange(len(rows))[::-1]
+        ax = axes[0, col]
+        for yi, (lab, r) in zip(y, rows):
+            comp, stall = r.token_latency_ms - r.stall_ms_per_token, r.stall_ms_per_token
+            ax.barh(yi, comp, height=0.55, color=S[0], edgecolor=SURFACE, linewidth=1.5,
+                    label="GPU computing" if yi == y[0] else None)
+            ax.barh(yi, stall, left=comp, height=0.55, color=S[3], edgecolor=SURFACE, linewidth=1.5,
+                    label="exposed stall (waiting on the link)" if yi == y[0] else None)
+            ax.text(comp + stall, yi, f"  {comp + stall:,.0f} ms ({100 * stall / (comp + stall):.0f} % stall)",
+                    va="center", fontsize=8, color=INK)
+        ax.set_yticks(y); ax.set_yticklabels([lab for lab, _ in rows] if col == 0 else [])
+        ax.grid(axis="y", visible=False)
+        ax.set_xlim(0, ax.get_xlim()[1] * 1.45)
+        ax.set_title(title, loc="left")
+        ax.set_xlabel("token latency (ms per decode step)")
+        ax = axes[1, col]
+        w = 0.36
+        for i, (key, lab, c) in enumerate((("demand_load_latency_ms", "demand load: request to arrival", S[6]),
+                                           ("expert_wait_ms", "wait per needed expert (hits count 0)", S[1]))):
+            v = [r[key] for _, r in rows]
+            bars = ax.barh(y + (0.5 - i) * w, v, w, color=c, edgecolor=SURFACE, linewidth=1.2,
+                           label=lab if col == 0 else None)
+            for yi, val in zip(y + (0.5 - i) * w, v):
+                ax.text(val, yi, f" {val:.2f}", va="center", fontsize=7.5, color=INK)
+        wire = rows[0][1].expert_load_wire_ms
+        ax.axvline(wire, color=MUTED, linewidth=1, linestyle="--", label="one expert on an idle link" if col == 0 else None)
+        ax.set_yticks(y); ax.set_yticklabels([lab for lab, _ in rows] if col == 0 else [])
+        ax.grid(axis="y", visible=False)
+        ax.set_xlim(0, ax.get_xlim()[1] * 1.15)
+        ax.set_xlabel("expert-load latency (ms)")
+    h0, l0 = axes[0, 0].get_legend_handles_labels()
+    h1, l1 = axes[1, 0].get_legend_handles_labels()
+    fig.legend(h0 + h1, l0 + l1, loc="lower center", ncol=3, bbox_to_anchor=(0.5, -0.07))
+    save(fig, "fig10_latency_stall.png", "Baseline vs prefetching: token latency, exposed stall and expert-load latency",
+         "HBM cache = 25 % of experts (A100, real Mixtral trace). On a fast link the full design cuts the exposed stall "
+         "from 68 % to 11 % of each token and halves the wait per needed expert. On PCIe 4.0 at batch 1 one copy (11 ms) "
+         "dwarfs a layer's compute: naive prefetching doubles the demand-load latency and is slower than no cache.")
+
+
+def fig_traffic_energy():
+    e3 = _e3_25()
+    cases = [("mixtral", 16, "C2C-900", "Mixtral, batch 16, C2C 900"),
+             ("deepseekR1", 16, "C2C-900", "DeepSeek-R1, batch 16, C2C 900")]
+    parts = [("link transfer", "transfer_J_per_token", S[0]), ("compute + HBM", "dynamic_J_per_token", S[1]),
+             ("background while running", "run_bg", S[2]), ("background while stalled", "stall_J_per_token", S[3])]
+    fig, axes = plt.subplots(2, 2, figsize=(10.5, 6.4))
+    for col, (m, b, ln, title) in enumerate(cases):
+        rows = _cmp_rows(e3, m, b, ln)
+        y = np.arange(len(rows))[::-1]
+        ax = axes[0, col]
+        for yi, (lab, r) in zip(y, rows):
+            wasted = r.wasted_GB_per_token
+            useful = r.GB_per_token - wasted
+            ax.barh(yi, useful, height=0.55, color=NEUTRAL, edgecolor=SURFACE, linewidth=1.5,
+                    label="traffic: copied and used" if yi == y[0] else None)
+            ax.barh(yi, wasted, left=useful, height=0.55, color=S[7], edgecolor=SURFACE, linewidth=1.5,
+                    label="traffic: prefetched, never used" if yi == y[0] else None)
+            txt = f"  {r.GB_per_token:,.0f} GB" + (f" ({wasted:,.1f} wasted)" if wasted >= 0.05 else "")
+            ax.text(r.GB_per_token, yi, txt, va="center", fontsize=8, color=INK)
+        ax.set_yticks(y); ax.set_yticklabels([lab for lab, _ in rows] if col == 0 else [])
+        ax.grid(axis="y", visible=False)
+        ax.set_xlim(0, ax.get_xlim()[1] * 1.4)
+        ax.set_title(f"{title}: traffic", loc="left")
+        ax.set_xlabel("GB copied over the link per decode step")
+        ax = axes[1, col]
+        for yi, (lab, r) in zip(y, rows):
+            r = r.copy()
+            r["run_bg"] = r.background_J_per_token - r.stall_J_per_token
+            left = 0.0
+            for pl, key, c in parts:
+                ax.barh(yi, r[key], left=left, height=0.55, color=c, edgecolor=SURFACE, linewidth=1.5,
+                        label=pl if (col == 0 and yi == y[0]) else None)
+                left += r[key]
+            ax.text(left, yi, f"  {left:.2f} J", va="center", fontsize=8, color=INK)
+        ax.set_yticks(y); ax.set_yticklabels([lab for lab, _ in rows] if col == 0 else [])
+        ax.grid(axis="y", visible=False)
+        ax.set_xlim(0, ax.get_xlim()[1] * 1.3)
+        ax.set_title(f"{title}: energy", loc="left")
+        ax.set_xlabel("J per decode step")
+    h0, l0 = axes[0, 0].get_legend_handles_labels()
+    h1, l1 = axes[1, 0].get_legend_handles_labels()
+    fig.legend(h0 + h1, l0 + l1, loc="lower center", ncol=3, bbox_to_anchor=(0.5, -0.07))
+    save(fig, "fig11_traffic_energy.png", "Prefetch traffic vs energy: guarded prefetching wastes almost nothing",
+         "HBM cache = 25 % of experts. Naive prefetching copies 38 % more data for DeepSeek-R1 (183 GB per step wasted) "
+         "and costs more energy than no cache. The full design moves fewer bytes than the baselines (better eviction "
+         "avoids re-copies) and removes the stall energy, cutting energy per step by 28 % (Mixtral) and 38 % (DeepSeek-R1).")
+
+
 def main():
     fig_problem()
     fig_predictor()
@@ -372,6 +483,8 @@ def main():
     fig_energy()
     fig_h100_validation()
     fig_hidden_state()
+    fig_latency_stall()
+    fig_traffic_energy()
 
 
 if __name__ == "__main__":

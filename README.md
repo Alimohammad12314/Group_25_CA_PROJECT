@@ -121,6 +121,14 @@ extra prefetch traffic costs (21 % fewer bytes and 17 % less energy than the bes
 
 ![energy](docs/figures/fig7_energy.png)
 
+**Prefetch traffic and its energy cost.** Naive prefetching copies 38 % more data for DeepSeek-R1 (183 GB per step
+never used) and costs more energy than no cache. Our prefetcher wastes at most a fraction of a GB per step (median
+extra traffic over the same design without prefetching: 0 GB), and the full design moves fewer bytes than the
+baselines because better eviction avoids re-copying experts. Energy per step falls 28 % (Mixtral) and 38 %
+(DeepSeek-R1) against on-demand, almost all of it stall energy.
+
+![traffic and energy](docs/figures/fig11_traffic_energy.png)
+
 **7. Bonus: real routing inside LLMSimulator.** The simulator replays 100 % of the traces' decisions exactly, and our
 timeline matches its per-step latency within 0.13 %. Its default uniform routing hides what the predictor exploits:
 for Llama-4 the design looks 1.3x better than on-demand with uniform routing but is 3.5x better with real routing.
@@ -155,6 +163,14 @@ for Llama-4 the design looks 1.3x better than on-demand with uniform routing but
 ![simulator vs real H100](docs/figures/fig8_h100_sim_vs_real.png)
 
 ![hidden-state predictor](docs/figures/fig9_hidden_state_accuracy.png)
+
+**Baseline vs prefetching: latency, exposed stall and expert-load latency.** On NVLink-C2C (batch 16) the full
+design cuts the exposed stall from 68 % to 11 % of each token and halves the average wait per needed expert. On PCIe
+4.0 at batch 1 one copy takes 11 ms against well under 1 ms of compute per layer, so nothing can be hidden; naive
+prefetching doubles the demand-load latency (35 ms) and is slower than no cache. Across all 48 settings (25 % cache)
+the full design has 25 % less exposed stall than LRU + miss overlap and 79 % less than on-demand.
+
+![latency and stall](docs/figures/fig10_latency_stall.png)
 
 **Expert-load latency** (batch 16, 25 % cache, ms; `results/e3_ablation/ablation.csv`):
 
